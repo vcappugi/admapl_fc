@@ -1,0 +1,180 @@
+{
+  "total_registros": 212276,
+  "total_ingresos": 883791150.75,
+  "total_egresos": 875966725.55,
+  "flujo_neto": 7824425.2,
+  "total_ingresos_count": 148824,
+  "total_egresos_count": 63452,
+  "tasa_promedio": 506.31,
+  "mensual": [
+    {
+      "mes": "ENERO",
+      "ingresos": 55771503.69,
+      "egresos": 55232872.52,
+      "neto": 538631.17,
+      "ingresos_count": 9914,
+      "egresos_count": 7111
+    },
+    {
+      "mes": "FEBRERO",
+      "ingresos": 64236858.17,
+      "egresos": 60820526.86,
+      "neto": 3416331.31,
+      "ingresos_count": 11618,
+      "egresos_count": 8741
+    },
+    {
+      "mes": "MARZO",
+      "ingresos": 94501139.11,
+      "egresos": 94877064.6,
+      "neto": -375925.49,
+      "ingresos_count": 15774,
+      "egresos_count": 8956
+    },
+    {
+      "mes": "ABRIL",
+      "ingresos": 93125364.39,
+      "egresos": 91479332.08,
+      "neto": 1646032.31,
+      "ingresos_count": 14494,
+      "egresos_count": 5831
+    },
+    {
+      "mes": "MAYO",
+      "ingresos": 107662437.13,
+      "egresos": 108280833.38,
+      "neto": -618396.25,
+      "ingresos_count": 17017,
+      "egresos_count": 6336
+    },
+    {
+      "mes": "JUNIO",
+      "ingresos": 97708956.94,
+      "egresos": 99290542.27,
+      "neto": -1581585.33,
+      "ingresos_count": 17735,
+      "egresos_count": 5882
+    },
+    {
+      "mes": "JULIO",
+      "ingresos": 114136332.14,
+      "egresos": 110832043.49,
+      "neto": 3304288.65,
+      "ingresos_count": 19592,
+      "egresos_count": 6681
+    },
+    {
+      "mes": "AGOSTO",
+      "ingresos": 128198936.33,
+      "egresos": 129079438.74,
+      "neto": -880502.41,
+      "ingresos_count": 21335,
+      "egresos_count": 6707
+    },
+    {
+      "mes": "SEPTIEMBRE",
+      "ingresos": 128449622.85,
+      "egresos": 126074071.61,
+      "neto": 2375551.24,
+      "ingresos_count": 21345,
+      "egresos_count": 7207
+    }
+  ],
+  "top_bancos": [
+    {
+      "banco": "VENEZUELA 876",
+      "monto": 129129216.73,
+      "count": 27132
+    },
+    {
+      "banco": "BANESCO 995",
+      "monto": 105051209.97,
+      "count": 22547
+    },
+    {
+      "banco": "CTA REAL ALL CAPITAL BANK FIGUES",
+      "monto": 89627448.0,
+      "count": 207
+    },
+    {
+      "banco": "BANESCO PANAMA USD",
+      "monto": 85320063.42,
+      "count": 1354
+    },
+    {
+      "banco": "CAJA RIO DE JANEIRO",
+      "monto": 76807483.09,
+      "count": 6778
+    },
+    {
+      "banco": "CTA REAL BANESCO USA 93667 FIGUES",
+      "monto": 71946511.38,
+      "count": 128
+    },
+    {
+      "banco": "ALL CAPITAL BANK TRUST",
+      "monto": 66510890.35,
+      "count": 230
+    },
+    {
+      "banco": "WALLET CONCESIONARIO TERCEROS ELCDE",
+      "monto": 61726719.91,
+      "count": 4639
+    },
+    {
+      "banco": "CONCESIONARIOS PROPIOS NKMM",
+      "monto": 54420363.12,
+      "count": 3803
+    },
+    {
+      "banco": "BANESCO USA",
+      "monto": 52003579.06,
+      "count": 757
+    }
+  ],
+  "clasificaciones": [
+    {
+      "clasificacion": "OPERATIVO",
+      "monto": 889267826.8,
+      "count": 194293
+    },
+    {
+      "clasificacion": "FINANCIERO",
+      "monto": 880712000.7,
+      "count": 15834
+    },
+    {
+      "clasificacion": "INVERSION",
+      "monto": 4909273.77,
+      "count": 2140
+    },
+    {
+      "clasificacion": "DIFERENCIAL DE CAMBIO",
+      "monto": 1013273.51,
+      "count": 9
+    }
+  ],
+  "meses_disponibles": [
+    "ENERO",
+    "FEBRERO",
+    "MARZO",
+    "ABRIL",
+    "MAYO",
+    "JUNIO",
+    "JULIO",
+    "AGOSTO",
+    "SEPTIEMBRE"
+  ],
+  "medios_ejecucion": [
+    "ANHUI",
+    "BANCOS FIGUES",
+    "BANCOS NACIONALES",
+    "BILLETERA DIGITAL",
+    "CAJAS EFECTIVO",
+    "CUENTAS CUSTODIA",
+    "DIFERENCIAL CAMBIARIO",
+    "EXTRANJEROS APL",
+    "PASARELA",
+    "PROPARTS"
+  ]
+}

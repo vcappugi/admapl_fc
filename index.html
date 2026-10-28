@@ -1,0 +1,744 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FlujoCaja Pro - Dashboard de Flujo de Caja</title>
+  <meta name="description" content="Dashboard ejecutivo en tiempo real para análisis de flujo de caja y movimientos financieros conectado a Supabase.">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Chart.js, Supabase Client & SheetJS (Excel) via CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+
+  <!-- Stylesheet -->
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+  <div class="dashboard-container blurred" id="dashboard-container">
+
+    <!-- Header -->
+    <header class="dashboard-header">
+      <div class="brand-wrapper">
+        <div class="brand-logo" id="brand-logo" aria-label="Logo de FlujoCaja Pro">
+          ⚡
+        </div>
+        <div>
+          <h1 class="brand-title" id="main-title">FlujoCaja Pro</h1>
+          <div class="brand-subtitle">
+            <span>Dashboard Financiero Ejecutivo</span>
+            <span>•</span>
+            <span style="color: var(--indigo-primary); font-weight: 600;">Tabla: fc_mov</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Supabase Connection Status Pill -->
+        <div class="status-badge" id="connection-status" title="Conexión en vivo con Supabase">
+          <span class="status-dot"></span>
+          <span class="status-text">Conectando...</span>
+        </div>
+
+        <!-- Export CSV Button -->
+        <button class="btn btn-secondary" id="btn-export" title="Exportar vista actual a CSV">
+          ⬇ Exportar Vista (CSV)
+        </button>
+
+        <!-- Refresh Button -->
+        <button class="btn btn-primary" id="btn-refresh" title="Actualizar datos desde Supabase">
+          🔄 Actualizar
+        </button>
+
+        <!-- User Profile Pill & Logout (visible when logged in) -->
+        <div class="user-profile-badge" id="user-profile-badge" style="display: none;">
+          <div class="user-avatar" id="user-avatar">VC</div>
+          <span class="user-name" id="user-name">vcappugi</span>
+          <button class="btn btn-secondary btn-sm" id="btn-logout" title="Cerrar Sesión">
+            🚪 Salir
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- KPI Metric Cards Grid -->
+    <section class="kpi-grid" id="kpi-section" aria-label="Indicadores Clave">
+      
+      <!-- Card 1: Flujo Neto -->
+      <article class="kpi-card net-cash" id="card-net-cash">
+        <div class="kpi-header">
+          <span class="kpi-label">Flujo Neto Total</span>
+          <div class="kpi-icon">💰</div>
+        </div>
+        <div class="kpi-value" id="kpi-net-cash">$ 0.00</div>
+        <div class="kpi-footer">
+          <span class="badge-trend positive" id="kpi-net-badge">▲ Superávit</span>
+          <span>Balance consolidado</span>
+        </div>
+      </article>
+
+      <!-- Card 2: Ingresos -->
+      <article class="kpi-card income" id="card-income">
+        <div class="kpi-header">
+          <span class="kpi-label">Total Ingresos</span>
+          <div class="kpi-icon">📈</div>
+        </div>
+        <div class="kpi-value" id="kpi-income">$ 0.00</div>
+        <div class="kpi-footer">
+          <span class="badge-trend positive">↑ Entradas</span>
+          <span id="kpi-income-count">0 transacciones</span>
+        </div>
+      </article>
+
+      <!-- Card 3: Egresos -->
+      <article class="kpi-card expenses" id="card-expenses">
+        <div class="kpi-header">
+          <span class="kpi-label">Total Egresos</span>
+          <div class="kpi-icon">📉</div>
+        </div>
+        <div class="kpi-value" id="kpi-expenses">$ 0.00</div>
+        <div class="kpi-footer">
+          <span class="badge-trend negative">↓ Salidas</span>
+          <span id="kpi-expenses-count">0 transacciones</span>
+        </div>
+      </article>
+
+      <!-- Card 4: Tasa BCV Promedio -->
+      <article class="kpi-card bcv" id="card-bcv">
+        <div class="kpi-header">
+          <span class="kpi-label">Tasa Promedio</span>
+          <div class="kpi-icon">⚖️</div>
+        </div>
+        <div class="kpi-value" id="kpi-bcv">0.00 Bs/$</div>
+        <div class="kpi-footer">
+          <span class="badge-trend neutral">Oficial BCV</span>
+          <span>Tipo de cambio ponderado</span>
+        </div>
+      </article>
+
+      <!-- Card 5: Total Movimientos -->
+      <article class="kpi-card volume" id="card-volume">
+        <div class="kpi-header">
+          <span class="kpi-label">Movimientos Registrados</span>
+          <div class="kpi-icon">📊</div>
+        </div>
+        <div class="kpi-value" id="kpi-volume">0</div>
+        <div class="kpi-footer">
+          <span class="badge-trend neutral">Supabase DB</span>
+          <span>Total en fc_mov</span>
+        </div>
+      </article>
+
+    </section>
+
+    <!-- Filters Section -->
+    <section class="filter-section" id="filter-section" aria-label="Filtros de Búsqueda">
+      <div class="filter-header">
+        <span>Filtros Dinámicos de Flujo de Caja</span>
+        <button class="btn btn-secondary btn-sm" id="btn-reset-filters">Limpiar Filtros</button>
+      </div>
+
+      <div class="filter-controls">
+        <!-- Live Search -->
+        <div class="search-input-wrapper">
+          <span class="search-icon">🔍</span>
+          <input 
+            type="text" 
+            class="input-field" 
+            id="filter-search" 
+            placeholder="Buscar por beneficiario, concepto, documento..." 
+            autocomplete="off"
+          >
+        </div>
+
+        <!-- Flow Filter (es) -->
+        <select class="select-field" id="filter-es" aria-label="Filtrar por Tipo de Flujo">
+          <option value="">Todos los Tipos</option>
+          <option value="INGRESO">Solo Ingresos</option>
+          <option value="EGRESO">Solo Egresos</option>
+        </select>
+
+        <!-- Month Filter (mes) -->
+        <select class="select-field" id="filter-mes" aria-label="Filtrar por Mes">
+          <option value="">Todos los Meses</option>
+        </select>
+
+        <!-- Classification Filter (clasificacion) -->
+        <select class="select-field" id="filter-clas" aria-label="Filtrar por Clasificación">
+          <option value="">Todas las Clasificaciones</option>
+        </select>
+
+        <!-- Bank Filter (banco) -->
+        <select class="select-field" id="filter-banco" aria-label="Filtrar por Banco">
+          <option value="">Todos los Bancos</option>
+        </select>
+
+        <!-- Execution Channel Filter (medio_ejecucion) -->
+        <select class="select-field" id="filter-medio" aria-label="Filtrar por Medio de Ejecución">
+          <option value="">Todos los Medios</option>
+        </select>
+
+        <!-- Page Size -->
+        <select class="select-field" id="page-size-select" style="min-width: 110px;" aria-label="Filas por página">
+          <option value="10">10 / pág</option>
+          <option value="25" selected>25 / pág</option>
+          <option value="50">50 / pág</option>
+          <option value="100">100 / pág</option>
+        </select>
+      </div>
+    </section>
+
+    <!-- Charts Section 1: Monthly Trend & Bank Distribution -->
+    <section class="charts-grid" id="charts-main-grid" aria-label="Gráficos Principales">
+      
+      <!-- Chart 1: Monthly Flow -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2 class="chart-title">
+            <span>📅</span> Evolución Mensual del Flujo de Caja
+          </h2>
+          <div class="chart-legend">
+            <span class="legend-item"><span class="legend-color" style="background: #10b981;"></span> Ingresos</span>
+            <span class="legend-item"><span class="legend-color" style="background: #f43f5e;"></span> Egresos</span>
+            <span class="legend-item"><span class="legend-color" style="background: #38bdf8;"></span> Flujo Neto</span>
+          </div>
+        </div>
+        <div class="chart-container">
+          <canvas id="chart-monthly"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 2: Top Banks -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2 class="chart-title">
+            <span>🏦</span> Concentración por Banco (Top)
+          </h2>
+        </div>
+        <div class="chart-container">
+          <canvas id="chart-banks"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Charts Section 2: Classification Breakdown & Cumulative Trend -->
+    <section class="secondary-charts-grid" id="charts-secondary-grid" aria-label="Gráficos Secundarios">
+      
+      <!-- Chart 3: Classification -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2 class="chart-title">
+            <span>📑</span> Distribución por Clasificación
+          </h2>
+        </div>
+        <div class="chart-container">
+          <canvas id="chart-classification"></canvas>
+        </div>
+      </div>
+
+      <!-- Chart 4: Cumulative Net Flow Trend -->
+      <div class="chart-card">
+        <div class="chart-header">
+          <h2 class="chart-title">
+            <span>📈</span> Tendencia de Balance Acumulado ($)
+          </h2>
+        </div>
+        <div class="chart-container">
+          <canvas id="chart-trend"></canvas>
+        </div>
+      </div>
+
+    </section>
+
+    <!-- Live Data Explorer Table -->
+    <section class="table-card" id="table-section" aria-label="Explorador de Movimientos en Vivo">
+      
+      <div class="table-header-bar">
+        <div class="table-title-area">
+          <h2 class="table-title">Explorador de Movimientos</h2>
+          <span class="table-counter-badge" id="table-counter">Cargando...</span>
+        </div>
+        <div class="table-actions">
+          <a href="descargar_plantilla.php" class="btn btn-secondary btn-sm" id="btn-download-template" title="Descargar plantilla CSV oficial (Formato_Movimientos.csv)">
+            📄 Descargar Plantilla
+          </a>
+          <button type="button" class="btn btn-primary btn-sm" id="btn-open-upload" title="Cargar movimientos desde archivo CSV">
+            📥 Cargar CSV
+          </button>
+          <input type="file" id="csv-file-input" accept=".csv,text/csv" style="display: none;">
+          <button class="btn btn-excel" id="btn-export-excel" title="Exportar movimientos a archivo Excel (.xlsx)">
+            📊 Exportar a Excel
+          </button>
+          <button class="btn btn-secondary btn-sm" id="btn-toggle-table-filters" title="Mostrar u ocultar filtros avanzados de tabla">
+            ⚙️ Filtros de Tabla
+          </button>
+        </div>
+      </div>
+
+      <!-- Dedicated Table Filters Sub-Toolbar -->
+      <div class="table-filters-toolbar" id="table-filters-toolbar">
+        <div class="table-filter-group">
+          <label class="table-filter-label" for="table-filter-date-from">Fecha Desde</label>
+          <input type="date" class="table-filter-input" id="table-filter-date-from" title="Filtrar fecha inicial">
+        </div>
+
+        <div class="table-filter-group">
+          <label class="table-filter-label" for="table-filter-date-to">Fecha Hasta</label>
+          <input type="date" class="table-filter-input" id="table-filter-date-to" title="Filtrar fecha final">
+        </div>
+
+        <div class="table-filter-group">
+          <label class="table-filter-label" for="table-filter-doc">Nro. Documento / Ref</label>
+          <input type="text" class="table-filter-input" id="table-filter-doc" placeholder="Ej: 1100188942">
+        </div>
+
+        <div class="table-filter-group">
+          <label class="table-filter-label" for="table-filter-benef">Beneficiario</label>
+          <input type="text" class="table-filter-input" id="table-filter-benef" placeholder="Nombre cliente...">
+        </div>
+
+        <div class="table-filter-group">
+          <label class="table-filter-label" for="table-filter-min-monto">Monto Mín ($)</label>
+          <input type="number" step="any" class="table-filter-input" id="table-filter-min-monto" placeholder="Min $">
+        </div>
+
+        <div class="table-filter-group">
+          <label class="table-filter-label" for="table-filter-max-monto">Monto Máx ($)</label>
+          <input type="number" step="any" class="table-filter-input" id="table-filter-max-monto" placeholder="Max $">
+        </div>
+
+        <div class="table-filter-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-clear-table-filters" title="Limpiar filtros específicos de tabla">
+            Limpiar Filtros Tabla
+          </button>
+        </div>
+      </div>
+
+      <div class="table-responsive">
+        <table class="data-table" id="movements-table">
+          <thead>
+            <tr>
+              <th class="sortable active" data-sort="fecha" title="Clic para ordenar por Fecha">
+                <span>Fecha</span> <span class="sort-icon" id="sort-icon-fecha">▼</span>
+              </th>
+              <th class="sortable" data-sort="es" title="Clic para ordenar por Tipo">
+                <span>Tipo</span> <span class="sort-icon" id="sort-icon-es">⇅</span>
+              </th>
+              <th class="sortable" data-sort="banco" title="Clic para ordenar por Banco">
+                <span>Banco</span> <span class="sort-icon" id="sort-icon-banco">⇅</span>
+              </th>
+              <th class="sortable" data-sort="beneficiario" title="Clic para ordenar por Beneficiario">
+                <span>Beneficiario / Cliente</span> <span class="sort-icon" id="sort-icon-beneficiario">⇅</span>
+              </th>
+              <th class="sortable" data-sort="concepto" title="Clic para ordenar por Concepto">
+                <span>Concepto</span> <span class="sort-icon" id="sort-icon-concepto">⇅</span>
+              </th>
+              <th class="sortable" data-sort="documento" title="Clic para ordenar por Documento">
+                <span>Doc / Ref</span> <span class="sort-icon" id="sort-icon-documento">⇅</span>
+              </th>
+              <th class="sortable" data-sort="tasa" title="Clic para ordenar por Tasa">
+                <span>Tasa</span> <span class="sort-icon" id="sort-icon-tasa">⇅</span>
+              </th>
+              <th class="sortable" data-sort="monto" style="text-align: right;" title="Clic para ordenar por Monto USD">
+                <span>Monto USD</span> <span class="sort-icon" id="sort-icon-monto">⇅</span>
+              </th>
+              <th style="text-align: center;">Acción</th>
+            </tr>
+          </thead>
+          <tbody id="table-body">
+            <!-- Dynamic Rows Generated by app.js -->
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination Bar -->
+      <div class="pagination-bar">
+        <div id="pagination-info">Mostrando movimientos...</div>
+        <div class="pagination-controls" id="pagination-controls">
+          <!-- Dynamic page buttons -->
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <!-- Transaction Detail / CRUD Modal -->
+  <div class="modal-overlay" id="detail-modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <h3 class="modal-title" id="modal-title">Detalle y Edición de Movimiento</h3>
+          <span id="modal-flow-badge"></span>
+        </div>
+        <button class="modal-close" id="modal-close-btn" aria-label="Cerrar modal">&times;</button>
+      </div>
+
+      <form id="modal-crud-form">
+        <div class="modal-body">
+          <!-- Alert box for success / error notifications -->
+          <div class="modal-alert" id="modal-alert" style="display: none;">
+            <span id="modal-alert-icon">ℹ️</span>
+            <span id="modal-alert-text"></span>
+          </div>
+
+          <div class="modal-form-grid">
+            <!-- PROTECTED FIELD 1: ID -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-id">
+                <span>ID Movimiento</span>
+                <span class="badge-locked">🔒 Bloqueado</span>
+              </label>
+              <input type="text" id="modal-input-id" class="modal-form-input locked" readonly title="El ID no puede ser modificado">
+            </div>
+
+            <!-- PROTECTED FIELD 2: Banco -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-banco">
+                <span>Banco</span>
+                <span class="badge-locked">🔒 Bloqueado</span>
+              </label>
+              <input type="text" id="modal-input-banco" class="modal-form-input locked" readonly title="El Banco no puede ser modificado">
+            </div>
+
+            <!-- PROTECTED FIELD 3: Documento -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-documento">
+                <span>Nro. Documento</span>
+                <span class="badge-locked">🔒 Bloqueado</span>
+              </label>
+              <input type="text" id="modal-input-documento" class="modal-form-input locked" readonly title="El Nro de Documento no puede ser modificado">
+            </div>
+
+            <!-- EDITABLE: Fecha -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-fecha">Fecha</label>
+              <input type="date" id="modal-input-fecha" class="modal-form-input" required>
+            </div>
+
+            <!-- EDITABLE: Tipo de Flujo -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-es">Tipo de Flujo</label>
+              <select id="modal-input-es" class="modal-form-select" required>
+                <option value="INGRESO">INGRESO</option>
+                <option value="EGRESO">EGRESO</option>
+              </select>
+            </div>
+
+            <!-- EDITABLE: Monto USD -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-monto">Monto USD</label>
+              <input type="number" step="0.01" id="modal-input-monto" class="modal-form-input" required>
+            </div>
+
+            <!-- EDITABLE: Medio de Ejecución -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-medio">Medio de Ejecución</label>
+              <input type="text" id="modal-input-medio" class="modal-form-input" placeholder="Ej: BANCOS NACIONALES">
+            </div>
+
+            <!-- EDITABLE: Clasificación -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-clas">Clasificación</label>
+              <input type="text" id="modal-input-clas" class="modal-form-input" placeholder="Ej: OPERATIVO">
+            </div>
+
+            <!-- EDITABLE: Referencia -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-referencia">Referencia</label>
+              <input type="text" id="modal-input-referencia" class="modal-form-input" placeholder="Referencia bancaria">
+            </div>
+
+            <!-- EDITABLE: Tasa de Cambio -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-tasa">Tasa de Cambio (Bs/$)</label>
+              <input type="number" step="0.01" id="modal-input-tasa" class="modal-form-input" placeholder="0.00">
+            </div>
+
+            <!-- EDITABLE: BCV / SAP -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-bcv">BCV / SAP (Bs/$)</label>
+              <input type="number" step="0.01" id="modal-input-bcv" class="modal-form-input" placeholder="0.00">
+            </div>
+
+            <!-- EDITABLE: División -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-division">División</label>
+              <input type="text" id="modal-input-division" class="modal-form-input" placeholder="Ej: 1208">
+            </div>
+
+            <!-- EDITABLE: Mes -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-mes">Mes</label>
+              <select id="modal-input-mes" class="modal-form-select">
+                <option value="ENERO">ENERO</option>
+                <option value="FEBRERO">FEBRERO</option>
+                <option value="MARZO">MARZO</option>
+                <option value="ABRIL">ABRIL</option>
+                <option value="MAYO">MAYO</option>
+                <option value="JUNIO">JUNIO</option>
+                <option value="JULIO">JULIO</option>
+                <option value="AGOSTO">AGOSTO</option>
+                <option value="SEPTIEMBRE">SEPTIEMBRE</option>
+                <option value="OCTUBRE">OCTUBRE</option>
+                <option value="NOVIEMBRE">NOVIEMBRE</option>
+                <option value="DICIEMBRE">DICIEMBRE</option>
+              </select>
+            </div>
+
+            <!-- EDITABLE: Año -->
+            <div class="modal-form-group">
+              <label class="modal-form-label" for="modal-input-ano">Año</label>
+              <input type="number" id="modal-input-ano" class="modal-form-input" placeholder="2026">
+            </div>
+
+            <!-- EDITABLE: Beneficiario / Cliente (Full Width) -->
+            <div class="modal-form-group modal-form-full">
+              <label class="modal-form-label" for="modal-input-beneficiario">Beneficiario / Cliente</label>
+              <input type="text" id="modal-input-beneficiario" class="modal-form-input" placeholder="Nombre de beneficiario o cliente">
+            </div>
+
+            <!-- EDITABLE: Concepto (Full Width) -->
+            <div class="modal-form-group modal-form-full">
+              <label class="modal-form-label" for="modal-input-concepto">Concepto Principal</label>
+              <input type="text" id="modal-input-concepto" class="modal-form-input" placeholder="Concepto del movimiento">
+            </div>
+
+            <!-- EDITABLE: Concepto 1 (Full Width) -->
+            <div class="modal-form-group modal-form-full">
+              <label class="modal-form-label" for="modal-input-concepto1">Concepto Secundario</label>
+              <input type="text" id="modal-input-concepto1" class="modal-form-input" placeholder="Detalle adicional">
+            </div>
+
+            <!-- EDITABLE: Texto / Observación (Full Width) -->
+            <div class="modal-form-group modal-form-full">
+              <label class="modal-form-label" for="modal-input-texto">Texto / Observación</label>
+              <textarea rows="2" id="modal-input-texto" class="modal-form-textarea" placeholder="Notas u observaciones de la transacción"></textarea>
+            </div>
+          </div>
+        </div>
+
+        <!-- Modal Footer Actions -->
+        <div class="modal-footer">
+          <button type="button" class="btn btn-danger" id="modal-btn-delete" title="Eliminar permanentemente este movimiento">
+            🗑️ Eliminar Movimiento
+          </button>
+          <div class="modal-footer-actions">
+            <button type="button" class="btn btn-secondary" id="modal-btn-cancel">
+              Cancelar
+            </button>
+            <button type="submit" class="btn btn-primary" id="modal-btn-save">
+              <span id="modal-save-text">💾 Guardar Cambios</span>
+              <div class="spinner" id="modal-save-spinner" style="display: none;"></div>
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal de Verificación y Carga de CSV -->
+  <div class="modal-overlay" id="csv-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="csv-modal-title">
+    <div class="modal-card modal-card-lg" id="csv-modal-card">
+      <div class="modal-header">
+        <div class="modal-header-text">
+          <h2 class="modal-title" id="csv-modal-title">📥 Verificación y Carga de Movimientos</h2>
+          <p class="modal-subtitle">Diagnóstico y validación de registros según formato oficial</p>
+        </div>
+        <button type="button" class="modal-close" id="csv-modal-close" aria-label="Cerrar modal">&times;</button>
+      </div>
+
+      <div class="modal-body csv-modal-body">
+        
+        <!-- Dropzone Area (Visible when choosing file or dragging) -->
+        <div class="csv-dropzone" id="csv-dropzone">
+          <div class="dropzone-icon">📁</div>
+          <div class="dropzone-text">
+            <strong>Haz clic para seleccionar o arrastra tu archivo CSV aquí</strong>
+            <span>Formato oficial requerido: <code>Formato_Movimientos.csv</code> (delimitador ';' o ',')</span>
+          </div>
+          <div class="dropzone-actions">
+            <button type="button" class="btn btn-primary btn-sm" id="btn-browse-file">
+              📂 Seleccionar Archivo CSV
+            </button>
+            <a href="descargar_plantilla.php" class="btn btn-secondary btn-sm" style="text-decoration: none;" title="Descargar plantilla CSV oficial">
+              📄 Descargar Plantilla Oficial
+            </a>
+            <button type="button" class="btn btn-secondary btn-sm" id="btn-load-sample" title="Cargar archivo CSV de prueba con registros válidos y rechazados para verificar diagnósticos">
+              🧪 Cargar Archivo de Prueba
+            </button>
+          </div>
+        </div>
+
+        <!-- Verification Results Area (Shown when file is analyzed) -->
+        <div id="csv-results-area" style="display: none; flex-direction: column; gap: 18px;">
+          <!-- Summary Stats Cards -->
+          <div class="csv-summary-grid">
+            <div class="csv-summary-card">
+              <span class="csv-summary-label">Archivo</span>
+              <span class="csv-summary-val" id="csv-stat-filename" title="Nombre del archivo">--</span>
+            </div>
+            <div class="csv-summary-card">
+              <span class="csv-summary-label">Total Leídos</span>
+              <span class="csv-summary-val" id="csv-stat-total">0</span>
+            </div>
+            <div class="csv-summary-card csv-card-valid">
+              <span class="csv-summary-label">✅ Válidos</span>
+              <span class="csv-summary-val" id="csv-stat-valid">0</span>
+            </div>
+            <div class="csv-summary-card csv-card-rejected">
+              <span class="csv-summary-label">❌ Rechazados</span>
+              <span class="csv-summary-val" id="csv-stat-rejected">0</span>
+            </div>
+          </div>
+
+          <!-- Filter tabs: Todos / Válidos / Rechazados -->
+          <div class="csv-tabs-bar">
+            <div class="csv-tabs" role="tablist">
+              <button type="button" class="csv-tab active" data-tab="all" id="csv-tab-all">
+                Todos (<span id="csv-tab-count-all">0</span>)
+              </button>
+              <button type="button" class="csv-tab" data-tab="valid" id="csv-tab-valid">
+                ✅ Válidos (<span id="csv-tab-count-valid">0</span>)
+              </button>
+              <button type="button" class="csv-tab" data-tab="rejected" id="csv-tab-rejected">
+                ❌ Rechazados (<span id="csv-tab-count-rejected">0</span>)
+              </button>
+            </div>
+            <div class="csv-actions-sub">
+              <button type="button" class="btn btn-secondary btn-sm" id="csv-btn-choose-other">
+                🔄 Cargar otro archivo
+              </button>
+            </div>
+          </div>
+
+          <!-- Informative banner -->
+          <div class="modal-alert alert-info" id="csv-info-banner">
+            <span>ℹ️ Solo los registros válidos serán procesados y almacenados en la tabla <strong>fc_mov</strong>. Los registros rechazados muestran el motivo específico de rechazo para su corrección.</span>
+          </div>
+
+          <!-- Table displaying verified rows -->
+          <div class="table-responsive csv-table-container">
+            <table class="data-table csv-table" id="csv-verification-table">
+              <thead>
+                <tr>
+                  <th style="width: 50px; text-align: center;">Fila</th>
+                  <th style="width: 110px; text-align: center;">Estado</th>
+                  <th style="width: 95px;">Fecha</th>
+                  <th style="width: 85px;">Tipo</th>
+                  <th>Banco</th>
+                  <th>Doc / Ref</th>
+                  <th style="text-align: right; width: 105px;">Monto USD</th>
+                  <th>Diagnóstico / Motivo de Rechazo</th>
+                </tr>
+              </thead>
+              <tbody id="csv-table-body">
+                <!-- Dynamically populated rows -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="modal-footer">
+        <div class="csv-footer-note" id="csv-footer-note">
+          <span>Seleccione o valide un archivo para continuar.</span>
+        </div>
+        <div class="modal-footer-actions">
+          <button type="button" class="btn btn-secondary" id="csv-modal-btn-cancel">
+            Cancelar
+          </button>
+          <button type="button" class="btn btn-primary" id="csv-modal-btn-commit">
+            <span id="csv-commit-text">🚀 Cargar Registros Válidos</span>
+            <div class="spinner" id="csv-commit-spinner" style="display: none;"></div>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Login Window Overlay -->
+  <div class="login-overlay" id="login-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
+    <div class="login-card">
+      <div class="login-brand">
+        <div class="brand-logo" style="width: 52px; height: 52px; font-size: 26px; margin: 0 auto 14px;">⚡</div>
+        <h2 class="login-title" id="login-title">Acceso al Sistema</h2>
+        <p class="login-subtitle">Ingresa tus credenciales para consultar el flujo de caja</p>
+      </div>
+
+      <form id="login-form" class="login-form" autocomplete="on">
+        <!-- Error alert message -->
+        <div class="login-error" id="login-error" style="display: none;" role="alert">
+          <span id="login-error-text">Usuario o clave incorrectos.</span>
+        </div>
+
+        <!-- Usuario Input -->
+        <div class="form-group">
+          <label class="form-label" for="login-username">Usuario</label>
+          <div class="input-with-icon">
+            <span class="field-icon">👤</span>
+            <input 
+              type="text" 
+              id="login-username" 
+              class="input-field" 
+              placeholder="Ej: vcappugi" 
+              required 
+              autocomplete="username"
+              autofocus
+            >
+          </div>
+        </div>
+
+        <!-- Clave Input -->
+        <div class="form-group">
+          <label class="form-label" for="login-password">Contraseña</label>
+          <div class="input-with-icon">
+            <span class="field-icon">🔒</span>
+            <input 
+              type="password" 
+              id="login-password" 
+              class="input-field" 
+              placeholder="Ingresa tu contraseña" 
+              required 
+              autocomplete="current-password"
+            >
+            <button type="button" class="btn-toggle-pass" id="btn-toggle-pass" title="Mostrar/ocultar contraseña" aria-label="Mostrar u ocultar contraseña">👁️</button>
+          </div>
+        </div>
+
+        <!-- Remember Me Checkbox -->
+        <div class="form-row-between">
+          <label class="checkbox-label">
+            <input type="checkbox" id="login-remember" checked>
+            <span>Recordar sesión</span>
+          </label>
+        </div>
+
+        <!-- Submit Button -->
+        <button type="submit" class="btn btn-primary btn-block" id="btn-login-submit">
+          <span id="login-btn-text">Iniciar Sesión</span>
+          <div class="spinner" id="login-spinner" style="display: none;"></div>
+        </button>
+
+        <div class="login-footer-security">
+          <span>🔒 Cifrado Bcrypt</span>
+          <span>•</span>
+          <span>Tabla usuarios (Supabase)</span>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- App Configuration & Controller -->
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

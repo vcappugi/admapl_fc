@@ -1,0 +1,23 @@
+# Archivos de datos masivos (>100MB no permitidos en GitHub)
+movimientos.csv
+movimientos_clean.csv
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Base de datos local SQLite
+*.db
+*.sqlite
+*.sqlite3
+*.db-wal
+*.db-shm
+
+# Variables de entorno locales
+.env
+
+# Archivos temporales de sistema
+Thumbs.db
+.DS_Store
+*.tmp
