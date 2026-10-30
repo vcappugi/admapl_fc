@@ -1924,6 +1924,295 @@ function closeCsvModal() {
   if (fileInput) fileInput.value = '';
 }
 
+// Helper: Parse Date in CSV formats (DD/MM/YYYY, DD-MM-YYYY, YYYY-MM-DD)
+function parseCsvDate(str) {
+  if (!str) return null;
+  const s = String(str).trim();
+  const dmyMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+  if (dmyMatch) {
+    const day = parseInt(dmyMatch[1], 10);
+    const month = parseInt(dmyMatch[2], 10);
+    const year = parseInt(dmyMatch[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1990 && year <= 2099) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    return null;
+  }
+  const ymdMatch = s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);
+  if (ymdMatch) {
+    const year = parseInt(ymdMatch[1], 10);
+    const month = parseInt(ymdMatch[2], 10);
+    const day = parseInt(ymdMatch[3], 10);
+    if (month >= 1 && month <= 12 && day >= 1 && day <= 31 && year >= 1990 && year <= 2099) {
+      return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    }
+    return null;
+  }
+  return null;
+}
+
+// Helper: Parse Number handling European (1.234,56) and US (1,234.56) formats
+function parseCsvNumber(val) {
+  if (val === null || val === undefined) return null;
+  let s = String(val).trim();
+  if (s === '') return null;
+
+  let isNeg = false;
+  if (s.startsWith('(') && s.endsWith(')')) {
+    isNeg = true;
+    s = s.slice(1, -1).trim();
+  } else if (s.startsWith('-')) {
+    isNeg = true;
+    s = s.slice(1).trim();
+  }
+
+  s = s.replace(/[\$\€\Bs\s]/gi, '');
+  const hasComma = s.includes(',');
+  const hasDot = s.includes('.');
+
+  if (hasComma && hasDot) {
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (hasComma && !hasDot) {
+    s = s.replace(',', '.');
+  }
+
+  const num = parseFloat(s);
+  if (isNaN(num)) return null;
+  return isNeg ? -Math.abs(num) : num;
+}
+
+// Helper: Split CSV line handling quoted strings and delimiters
+function splitCsvLine(line, delimiter) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      result.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+// Client-side CSV Parser & Validator compatible with Vercel and offline hosting
+function parseAndValidateCsvClient(csvText, filename = 'archivo.csv') {
+  const CSV_MONTH_NAMES = {
+    1: 'ENERO', 2: 'FEBRERO', 3: 'MARZO', 4: 'ABRIL',
+    5: 'MAYO', 6: 'JUNIO', 7: 'JULIO', 8: 'AGOSTO',
+    9: 'SEPTIEMBRE', 10: 'OCTUBRE', 11: 'NOVIEMBRE', 12: 'DICIEMBRE'
+  };
+
+  let text = csvText.replace(/^\uFEFF/, '').trim();
+  if (!text) {
+    throw new Error('El archivo CSV está vacío.');
+  }
+
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if (lines.length < 2) {
+    throw new Error('El archivo CSV no contiene registros de datos (solo encabezados o vacío).');
+  }
+
+  // Detect delimiter: semicolon or comma
+  const firstLine = lines[0];
+  const countSemicolon = (firstLine.match(/;/g) || []).length;
+  const countComma = (firstLine.match(/,/g) || []).length;
+  const delimiter = countSemicolon >= countComma ? ';' : ',';
+
+  const rawHeaders = splitCsvLine(firstLine, delimiter).map(h => h.trim());
+  const cleanHeaders = rawHeaders.map(h => {
+    return h.toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/[^a-z0-9]/g, '');
+  });
+
+  const findCol = (terms) => {
+    for (let term of terms) {
+      const idx = cleanHeaders.findIndex(h => h === term || h.includes(term));
+      if (idx !== -1) return idx;
+    }
+    return -1;
+  };
+
+  const colMap = {
+    semana: findCol(['semana']),
+    es: findCol(['es', 'flujo', 'tipoflujo']),
+    mes: findCol(['mes']),
+    ano: findCol(['ano', 'anho', 'periodo', 'year']),
+    clasificacion: findCol(['clasificacion', 'categoria']),
+    fecha: findCol(['fecha', 'date']),
+    banco: findCol(['banco', 'entidad']),
+    documento: findCol(['documento', 'doc', 'ndocumento']),
+    tipo: findCol(['tipo']),
+    referencia: findCol(['referencia', 'ref']),
+    monto_bs: findCol(['montobs', 'bs', 'bolivares']),
+    tasa: findCol(['tasa', 'tasadecambio']),
+    bcv_sap: findCol(['bcvsap', 'bcv']),
+    monto: findCol(['monto', 'monto_usd', 'usd', 'importe']),
+    division: findCol(['division']),
+    beneficiario: findCol(['beneficiario', 'cliente', 'proveedor']),
+    concepto: findCol(['concepto']),
+    texto: findCol(['texto', 'observacion']),
+    concepto1: findCol(['concepto1']),
+    clas: findCol(['clas']),
+    medio_ejecucion: findCol(['medioejecucion', 'medio'])
+  };
+
+  if (colMap.es === -1 || colMap.fecha === -1 || colMap.monto === -1) {
+    throw new Error("El archivo CSV no contiene las columnas mínimas requeridas ('es', 'fecha', 'monto').");
+  }
+
+  const results = [];
+  let validCount = 0;
+  let rejectedCount = 0;
+
+  for (let i = 1; i < lines.length; i++) {
+    const rawCols = splitCsvLine(lines[i], delimiter);
+    const rowNum = i + 1;
+    const reasons = [];
+
+    const getVal = (key) => {
+      const idx = colMap[key];
+      return (idx !== -1 && idx < rawCols.length) ? rawCols[idx].trim() : '';
+    };
+
+    const raw_es = getVal('es').toUpperCase();
+    const raw_fecha = getVal('fecha');
+    const raw_banco = getVal('banco');
+    const raw_documento = getVal('documento');
+    const raw_referencia = getVal('referencia');
+    const raw_monto = getVal('monto');
+    const raw_tasa = getVal('tasa');
+    const raw_bcv_sap = getVal('bcv_sap');
+    const raw_clasificacion = getVal('clasificacion');
+    const raw_medio = getVal('medio_ejecucion');
+    const raw_beneficiario = getVal('beneficiario');
+    const raw_concepto = getVal('concepto');
+    const raw_concepto1 = getVal('concepto1');
+    const raw_texto = getVal('texto');
+    const raw_tipo = getVal('tipo');
+    const raw_division = getVal('division');
+    let raw_mes = getVal('mes').toUpperCase();
+    let raw_ano = getVal('ano');
+    const raw_semana = getVal('semana');
+    const raw_clas = getVal('clas');
+
+    // Validación 1: Flujo ('es')
+    let clean_es = null;
+    if (raw_es !== 'INGRESO' && raw_es !== 'EGRESO') {
+      reasons.push(`Columna 'es' inválida ('${raw_es || 'VACÍO'}'). Debe ser INGRESO o EGRESO.`);
+    } else {
+      clean_es = raw_es;
+    }
+
+    // Validación 2: Fecha
+    const clean_fecha = parseCsvDate(raw_fecha);
+    if (!clean_fecha) {
+      reasons.push(`Fecha inválida ('${raw_fecha || 'VACÍO'}'). Formato requerido: DD/MM/AAAA o AAAA-MM-DD.`);
+    }
+
+    // Validación 3: Banco
+    const clean_banco = raw_banco;
+    if (!clean_banco) {
+      reasons.push(`Banco obligatorio. La columna 'banco' no puede estar vacía.`);
+    }
+
+    // Validación 4: Documento o Referencia
+    const clean_doc = raw_documento || raw_referencia;
+    if (!clean_doc) {
+      reasons.push(`Documento o referencia obligatorio.`);
+    }
+
+    // Validación 5: Monto
+    let clean_monto = parseCsvNumber(raw_monto);
+    if (clean_monto === null || clean_monto === 0) {
+      reasons.push(`Monto inválido o cero ('${raw_monto || 'VACÍO'}').`);
+    } else {
+      if (clean_es === 'EGRESO' && clean_monto > 0) {
+        clean_monto = -clean_monto;
+      } else if (clean_es === 'INGRESO' && clean_monto < 0) {
+        clean_monto = Math.abs(clean_monto);
+      }
+    }
+
+    // Mes y Año derivados
+    if (clean_fecha) {
+      const parts = clean_fecha.split('-');
+      if (!raw_mes) {
+        const mNum = parseInt(parts[1], 10);
+        raw_mes = CSV_MONTH_NAMES[mNum] || 'GENERAL';
+      }
+      if (!raw_ano) {
+        raw_ano = parts[0];
+      }
+    }
+
+    const isValid = reasons.length === 0;
+    if (isValid) {
+      validCount++;
+    } else {
+      rejectedCount++;
+    }
+
+    const cleanData = {
+      es: clean_es || raw_es,
+      mes: raw_mes || 'GENERAL',
+      año: raw_ano || String(new Date().getFullYear()),
+      clasificacion: raw_clasificacion || 'OPERATIVO',
+      fecha: clean_fecha || raw_fecha,
+      banco: clean_banco,
+      documento: clean_doc,
+      tipo: raw_tipo || (clean_es === 'INGRESO' ? 'NC' : 'ND'),
+      referencia: raw_referencia || clean_doc,
+      tasa: parseCsvNumber(raw_tasa),
+      bcv_sap: parseCsvNumber(raw_bcv_sap),
+      monto: clean_monto,
+      division: raw_division || '',
+      beneficiario: raw_beneficiario || '',
+      concepto: raw_concepto || '',
+      texto: raw_texto || '',
+      concepto1: raw_concepto1 || '',
+      clas: raw_clas || '',
+      medio_ejecucion: raw_medio || ''
+    };
+
+    results.push({
+      row_number: rowNum,
+      status: isValid ? 'valid' : 'rejected',
+      reasons: reasons,
+      data: cleanData,
+      raw: {
+        es: raw_es,
+        fecha: raw_fecha,
+        banco: raw_banco,
+        documento: raw_documento,
+        referencia: raw_referencia,
+        monto: raw_monto
+      }
+    });
+  }
+
+  return {
+    success: true,
+    filename: filename,
+    total: lines.length - 1,
+    valid_count: validCount,
+    rejected_count: rejectedCount,
+    rows: results
+  };
+}
+
 async function handleCsvFileVerification(file) {
   if (!file.name.toLowerCase().endsWith('.csv')) {
     alert('Por favor seleccione un archivo con formato .CSV válido.');
@@ -1972,19 +2261,40 @@ async function handleCsvFileVerification(file) {
   }
 
   try {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('action', 'validate');
+    let data = null;
 
-    const resp = await fetch('import_csv.php?action=validate', {
-      method: 'POST',
-      body: formData
-    });
+    // 1. Intentar primero con backend PHP si está disponible (entorno local XAMPP)
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('action', 'validate');
 
-    const data = await resp.json();
+      const resp = await fetch('import_csv.php?action=validate', {
+        method: 'POST',
+        body: formData
+      });
 
-    if (!resp.ok || !data.success) {
-      throw new Error(data.error || 'Error al validar el archivo CSV.');
+      if (resp.ok) {
+        const text = await resp.text();
+        if (text && text.trim().startsWith('{')) {
+          const parsed = JSON.parse(text);
+          if (parsed && parsed.success) {
+            data = parsed;
+          }
+        }
+      }
+    } catch (phpErr) {
+      console.warn('import_csv.php no disponible (modo Vercel). Validando en cliente...', phpErr);
+    }
+
+    // 2. Si no respondió PHP (ej. Vercel estático), validar directamente en el navegador
+    if (!data) {
+      const fileText = await file.text();
+      data = parseAndValidateCsvClient(fileText, file.name);
+    }
+
+    if (!data || !data.success) {
+      throw new Error((data && data.error) || 'Error al validar el archivo CSV.');
     }
 
     verifiedCsvData = data;
@@ -2142,16 +2452,76 @@ async function commitValidCsvRecords() {
       records: validRows.map(r => r.data)
     };
 
-    const resp = await fetch('import_csv.php', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    let res = null;
 
-    const res = await resp.json();
+    // 1. Intentar guardar vía PHP si está disponible (entorno local XAMPP)
+    try {
+      const resp = await fetch('import_csv.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (resp.ok) {
+        const text = await resp.text();
+        if (text && text.trim().startsWith('{')) {
+          const parsed = JSON.parse(text);
+          if (parsed && parsed.success) {
+            res = parsed;
+          }
+        }
+      }
+    } catch (phpErr) {
+      console.warn('import_csv.php no disponible (modo Vercel). Guardando directamente en Supabase...', phpErr);
+    }
 
-    if (!resp.ok || !res.success) {
-      throw new Error(res.error || 'Error al guardar los registros en el servidor.');
+    // 2. Si backend PHP no respondió (despliegue en Vercel), insertar directamente en Supabase
+    if (!res || !res.success) {
+      if (!supabaseClient) {
+        initSupabase();
+      }
+      if (!supabaseClient) {
+        throw new Error('No se pudo conectar a Supabase para guardar los registros.');
+      }
+
+      const recordsToInsert = validRows.map(r => r.data);
+      const BATCH_SIZE = 100;
+      let insertedTotal = 0;
+
+      for (let i = 0; i < recordsToInsert.length; i += BATCH_SIZE) {
+        const chunk = recordsToInsert.slice(i, i + BATCH_SIZE);
+        const { error: insertErr } = await supabaseClient
+          .from('fc_mov')
+          .insert(chunk);
+
+        if (insertErr) {
+          throw new Error('Error al insertar en Supabase: ' + insertErr.message);
+        }
+        insertedTotal += chunk.length;
+        if (commitText) {
+          commitText.textContent = `Insertando ${insertedTotal} / ${recordsToInsert.length}...`;
+        }
+      }
+
+      // Registrar auditoría en control_cambios de Supabase
+      try {
+        await supabaseClient.from('control_cambios').insert({
+          tabla_afectada: 'fc_mov',
+          registro_id: 0,
+          operacion: 'INSERT_BATCH',
+          usuario_id: userId,
+          detalles_json: JSON.stringify({
+            archivo: verifiedCsvData.filename,
+            total_insertados: insertedTotal
+          }),
+          created_at: new Date().toISOString()
+        });
+      } catch (_) {}
+
+      res = {
+        success: true,
+        inserted_count: insertedTotal,
+        message: `Se insertaron exitosamente ${insertedTotal} movimientos en Supabase.`
+      };
     }
 
     if (footerNote) {
@@ -2160,7 +2530,7 @@ async function commitValidCsvRecords() {
     if (commitText) commitText.textContent = '¡Carga Exitosa!';
     if (spinner) spinner.style.display = 'none';
 
-    // Refresh Dashboard
+    // Refresh Dashboard en vivo
     await fetchTableData();
     await updateAnalytics();
     if (typeof loadSummaryData === 'function') {
@@ -2169,7 +2539,7 @@ async function commitValidCsvRecords() {
 
     setTimeout(() => {
       closeCsvModal();
-      alert(`✅ ¡Carga completada con éxito!\n\nSe insertaron ${res.inserted_count || validRows.length} registros en la tabla fc_mov y se sincronizaron con Supabase.`);
+      alert(`✅ ¡Carga completada con éxito!\n\nSe insertaron ${res.inserted_count || validRows.length} registros en la tabla fc_mov de Supabase.`);
     }, 800);
 
   } catch (err) {
