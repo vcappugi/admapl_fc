@@ -1786,17 +1786,106 @@ function setupSortingEvents() {
    Authentication & Login Flow Controller
    ========================================================================== */
 let currentUser = null;
+window.currentUser = null;
+
+// Guardar y sincronizar usuario en memoria (JavaScript runtime) y persistencia (localStorage/sessionStorage)
+function saveUserSession(userData) {
+  if (!userData) return null;
+
+  let role = (userData.rol || '').trim().toLowerCase();
+  if (!role && userData.nombre && userData.nombre.toLowerCase() === 'vcappugi') {
+    role = 'admin';
+  }
+  if (!role) role = 'usuario';
+
+  const userObj = {
+    id: userData.id,
+    nombre: userData.nombre,
+    rol: role,
+    created_at: userData.created_at || new Date().toISOString()
+  };
+
+  // Guardar en memoria de JavaScript
+  currentUser = userObj;
+  window.currentUser = userObj;
+
+  const authPayload = {
+    success: true,
+    user: userObj,
+    timestamp: Date.now()
+  };
+
+  try {
+    localStorage.setItem('flujocaja_auth', JSON.stringify(authPayload));
+    localStorage.setItem('flujocaja_user_rol', userObj.rol);
+    localStorage.setItem('flujocaja_user_nombre', userObj.nombre);
+  } catch (e) {
+    console.warn('No se pudo guardar en localStorage:', e);
+  }
+
+  try {
+    sessionStorage.setItem('flujocaja_auth', JSON.stringify(authPayload));
+    sessionStorage.setItem('flujocaja_user_rol', userObj.rol);
+    sessionStorage.setItem('flujocaja_user_nombre', userObj.nombre);
+  } catch (e) {
+    console.warn('No se pudo guardar en sessionStorage:', e);
+  }
+
+  return userObj;
+}
+
+function clearUserSession() {
+  currentUser = null;
+  window.currentUser = null;
+  try {
+    localStorage.removeItem('flujocaja_auth');
+    localStorage.removeItem('flujocaja_user_rol');
+    localStorage.removeItem('flujocaja_user_nombre');
+    sessionStorage.removeItem('flujocaja_auth');
+    sessionStorage.removeItem('flujocaja_user_rol');
+    sessionStorage.removeItem('flujocaja_user_nombre');
+  } catch (e) {}
+}
 
 function getStoredAuth() {
+  // 1. Memoria activa de la aplicación
+  if (currentUser && currentUser.rol) {
+    return { success: true, user: currentUser };
+  }
+  if (window.currentUser && window.currentUser.rol) {
+    currentUser = window.currentUser;
+    return { success: true, user: currentUser };
+  }
+
+  // 2. Almacenamiento persistente
+  let auth = null;
   const local = localStorage.getItem('flujocaja_auth');
   if (local) {
-    try { return JSON.parse(local); } catch(e){}
+    try { auth = JSON.parse(local); } catch(e){}
   }
-  const session = sessionStorage.getItem('flujocaja_auth');
-  if (session) {
-    try { return JSON.parse(session); } catch(e){}
+  if (!auth) {
+    const session = sessionStorage.getItem('flujocaja_auth');
+    if (session) {
+      try { auth = JSON.parse(session); } catch(e){}
+    }
   }
-  return null;
+
+  if (auth && auth.user) {
+    if (!auth.user.rol) {
+      const backupRole = localStorage.getItem('flujocaja_user_rol') || sessionStorage.getItem('flujocaja_user_rol');
+      if (backupRole) {
+        auth.user.rol = backupRole;
+      } else if (auth.user.nombre && auth.user.nombre.toLowerCase() === 'vcappugi') {
+        auth.user.rol = 'admin';
+      } else {
+        auth.user.rol = 'usuario';
+      }
+    }
+    currentUser = auth.user;
+    window.currentUser = auth.user;
+  }
+
+  return auth;
 }
 
 function updateAuthUI(user) {
@@ -1805,26 +1894,31 @@ function updateAuthUI(user) {
   const userBadge = document.getElementById('user-profile-badge');
   const userNameEl = document.getElementById('user-name');
   const userAvatar = document.getElementById('user-avatar');
+  const userRoleBadge = document.getElementById('user-role-badge');
   const btnManageUsers = document.getElementById('btn-manage-users');
 
   if (user) {
-    currentUser = user;
-    // Si rol no está asignado en la sesión guardada y es vcappugi, asegurar rol admin
-    if (!currentUser.rol && currentUser.nombre && currentUser.nombre.toLowerCase() === 'vcappugi') {
-      currentUser.rol = 'admin';
-    }
+    const userObj = saveUserSession(user);
 
     if (dashboard) dashboard.classList.remove('blurred');
     if (loginOverlay) loginOverlay.classList.add('hidden');
     if (userBadge) userBadge.style.display = 'flex';
-    if (userNameEl) userNameEl.textContent = user.nombre || 'vcappugi';
+    if (userNameEl) userNameEl.textContent = userObj.nombre || 'vcappugi';
     if (userAvatar) {
-      const initials = (user.nombre || 'VC').slice(0, 2).toUpperCase();
+      const initials = (userObj.nombre || 'VC').slice(0, 2).toUpperCase();
       userAvatar.textContent = initials;
     }
 
+    // Mostrar el badge del rol en la interfaz
+    if (userRoleBadge) {
+      const role = (userObj.rol || 'usuario').toLowerCase();
+      userRoleBadge.textContent = role === 'admin' ? '👑 admin' : '👤 usuario';
+      userRoleBadge.className = `user-role-badge ${role}`;
+      userRoleBadge.style.display = 'inline-flex';
+    }
+
     // Activar botón con engranaje SOLO para usuarios con rol 'admin'
-    const isAdmin = currentUser.rol === 'admin';
+    const isAdmin = (userObj.rol || '').toLowerCase() === 'admin';
     if (btnManageUsers) {
       if (isAdmin) {
         btnManageUsers.style.display = 'inline-flex';
@@ -1834,7 +1928,7 @@ function updateAuthUI(user) {
       }
     }
   } else {
-    currentUser = null;
+    clearUserSession();
     if (dashboard) dashboard.classList.add('blurred');
     if (loginOverlay) {
       loginOverlay.classList.remove('hidden');
@@ -1843,6 +1937,7 @@ function updateAuthUI(user) {
     }
     if (userBadge) userBadge.style.display = 'none';
     if (btnManageUsers) btnManageUsers.style.display = 'none';
+    if (userRoleBadge) userRoleBadge.style.display = 'none';
   }
 }
 
@@ -3272,13 +3367,8 @@ function setupAuthEvents() {
         }
 
         if (isSuccess && authResult && authResult.user) {
-          // Success
-          if (rememberCheckbox && rememberCheckbox.checked) {
-            localStorage.setItem('flujocaja_auth', JSON.stringify(authResult));
-          } else {
-            sessionStorage.setItem('flujocaja_auth', JSON.stringify(authResult));
-          }
-
+          // Success: Guardar en memoria y almacenamiento persistente (nombre y rol)
+          saveUserSession(authResult.user);
           updateAuthUI(authResult.user);
 
           // Initialize Dashboard data if not already loaded
@@ -3301,8 +3391,7 @@ function setupAuthEvents() {
   // Handle Logout
   if (logoutBtn) {
     logoutBtn.addEventListener('click', () => {
-      localStorage.removeItem('flujocaja_auth');
-      sessionStorage.removeItem('flujocaja_auth');
+      clearUserSession();
       updateAuthUI(null);
       if (usernameInput) usernameInput.focus();
     });
@@ -3328,31 +3417,47 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkSupabaseConnection();
   }
 
-  const storedAuth = getStoredAuth();
+  // 1. Obtener usuario y rol desde memoria o almacenamiento local/sesión
+  let storedAuth = getStoredAuth();
+
+  // 2. Si no hay datos en navegador, verificar si existe sesión activa en PHP
+  if (!storedAuth || !storedAuth.user) {
+    try {
+      const resp = await fetch('login.php?action=check');
+      if (resp.ok) {
+        const sData = await resp.json();
+        if (sData && sData.success && sData.user) {
+          storedAuth = { success: true, user: sData.user };
+          saveUserSession(sData.user);
+        }
+      }
+    } catch (_) {}
+  }
+
   if (storedAuth && storedAuth.user) {
-    // Si el rol no estaba almacenado en caché, refrescarlo desde Supabase
-    if (!storedAuth.user.rol && supabaseClient) {
+    // 3. Sincronizar y refrescar el rol en memoria desde la tabla usuarios de Supabase
+    if (supabaseClient && storedAuth.user.id) {
       try {
         const { data: uInfo } = await supabaseClient
           .from('usuarios')
-          .select('rol')
+          .select('id, nombre, rol, created_at')
           .eq('id', storedAuth.user.id)
           .single();
         if (uInfo && uInfo.rol) {
           storedAuth.user.rol = uInfo.rol;
-          if (localStorage.getItem('flujocaja_auth')) {
-            localStorage.setItem('flujocaja_auth', JSON.stringify(storedAuth));
-          } else {
-            sessionStorage.setItem('flujocaja_auth', JSON.stringify(storedAuth));
-          }
+          if (uInfo.nombre) storedAuth.user.nombre = uInfo.nombre;
+          saveUserSession(storedAuth.user);
         }
       } catch (_) {}
     }
+
     // Asignar rol admin para vcappugi por defecto si faltara
-    if (!storedAuth.user.rol && storedAuth.user.nombre === 'vcappugi') {
+    if (!storedAuth.user.rol && storedAuth.user.nombre && storedAuth.user.nombre.toLowerCase() === 'vcappugi') {
       storedAuth.user.rol = 'admin';
     }
 
+    // Persistir y reflejar en interfaz
+    saveUserSession(storedAuth.user);
     updateAuthUI(storedAuth.user);
     await loadSummaryData();
     await fetchTableData();
