@@ -1809,6 +1809,11 @@ function updateAuthUI(user) {
 
   if (user) {
     currentUser = user;
+    // Si rol no está asignado en la sesión guardada y es vcappugi, asegurar rol admin
+    if (!currentUser.rol && currentUser.nombre && currentUser.nombre.toLowerCase() === 'vcappugi') {
+      currentUser.rol = 'admin';
+    }
+
     if (dashboard) dashboard.classList.remove('blurred');
     if (loginOverlay) loginOverlay.classList.add('hidden');
     if (userBadge) userBadge.style.display = 'flex';
@@ -1819,8 +1824,9 @@ function updateAuthUI(user) {
     }
 
     // Activar botón con engranaje SOLO para usuarios con rol 'admin'
+    const isAdmin = currentUser.rol === 'admin';
     if (btnManageUsers) {
-      if (user.rol === 'admin') {
+      if (isAdmin) {
         btnManageUsers.style.display = 'inline-flex';
         btnManageUsers.title = 'Gestión de Usuarios (Administrador)';
       } else {
@@ -2637,14 +2643,22 @@ function setupUsersManagementEvents() {
   if (!btnManageUsers) return;
 
   // Abrir Modal de Usuarios (Solo Administradores)
-  btnManageUsers.addEventListener('click', async () => {
+  btnManageUsers.addEventListener('click', async (e) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
+    if (currentUser && !currentUser.rol && currentUser.nombre && currentUser.nombre.toLowerCase() === 'vcappugi') {
+      currentUser.rol = 'admin';
+    }
+
     if (!currentUser || currentUser.rol !== 'admin') {
       alert('Acceso restringido: Esta sección solo está disponible para usuarios con rol "admin".');
       return;
     }
     if (modalOverlay) {
-      modalOverlay.classList.add('active');
-      modalOverlay.style.display = 'flex';
+      modalOverlay.classList.add('open');
       closeUserForm();
       if (searchInput) searchInput.value = '';
       await loadUsersList();
@@ -2654,8 +2668,7 @@ function setupUsersManagementEvents() {
   // Cerrar Modal
   const closeUsersModal = () => {
     if (modalOverlay) {
-      modalOverlay.classList.remove('active');
-      modalOverlay.style.display = 'none';
+      modalOverlay.classList.remove('open');
     }
     closeUserForm();
     hideUsersAlert();
