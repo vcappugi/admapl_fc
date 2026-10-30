@@ -1613,9 +1613,13 @@ function setupModalCrudEvents() {
       const id = parseInt(document.getElementById('modal-input-id')?.value);
       if (!id) return;
 
-      const confirmed = confirm(
-        `¿Está seguro de que desea eliminar permanentemente el movimiento #${id}?\n\nEsta operación se registrará en la tabla control_cambios de la base de datos.`
-      );
+      const confirmed = await showConfirmModal({
+        title: 'Confirmar Eliminación de Movimiento',
+        message: `¿Está seguro de que desea eliminar permanentemente el movimiento <strong>#${id}</strong>?<br><br><small class="text-muted">Esta operación se registrará en la auditoría de control de cambios.</small>`,
+        confirmText: '🗑️ Sí, eliminar',
+        confirmType: 'danger',
+        icon: '🗑️'
+      });
       if (!confirmed) return;
 
       deleteBtn.disabled = true;
@@ -3168,18 +3172,106 @@ async function handleSaveUser() {
   }
 }
 
+// ==============================================================================
+// Modal de Confirmación Global (Eliminación / Alerta)
+// ==============================================================================
+let confirmModalResolve = null;
+
+function showConfirmModal({
+  title = 'Confirmar Acción',
+  message = '¿Estás seguro de continuar?',
+  confirmText = '🗑️ Sí, eliminar',
+  confirmType = 'danger',
+  icon = '🗑️'
+} = {}) {
+  return new Promise((resolve) => {
+    confirmModalResolve = resolve;
+    const overlay = document.getElementById('confirm-modal-overlay');
+    const titleEl = document.getElementById('confirm-modal-title');
+    const messageEl = document.getElementById('confirm-modal-message');
+    const iconEl = document.getElementById('confirm-modal-icon');
+    const acceptBtn = document.getElementById('btn-confirm-accept');
+    const textEl = document.getElementById('btn-confirm-text');
+    const spinner = document.getElementById('confirm-spinner');
+
+    if (titleEl) titleEl.textContent = title;
+    if (messageEl) messageEl.innerHTML = message;
+    if (iconEl) iconEl.textContent = icon;
+    if (textEl) textEl.textContent = confirmText;
+    if (spinner) spinner.style.display = 'none';
+
+    if (acceptBtn) {
+      acceptBtn.disabled = false;
+      acceptBtn.className = confirmType === 'danger' ? 'btn btn-danger btn-sm' : 'btn btn-primary btn-sm';
+    }
+
+    if (overlay) {
+      overlay.classList.add('open');
+    }
+  });
+}
+
+function closeConfirmModal(result = false) {
+  const overlay = document.getElementById('confirm-modal-overlay');
+  if (overlay) overlay.classList.remove('open');
+  if (typeof confirmModalResolve === 'function') {
+    const fn = confirmModalResolve;
+    confirmModalResolve = null;
+    fn(result);
+  }
+}
+
+function setupConfirmModalEvents() {
+  const cancelBtn = document.getElementById('btn-confirm-cancel');
+  const acceptBtn = document.getElementById('btn-confirm-accept');
+  const overlay = document.getElementById('confirm-modal-overlay');
+
+  if (cancelBtn) {
+    cancelBtn.addEventListener('click', () => closeConfirmModal(false));
+  }
+  if (acceptBtn) {
+    acceptBtn.addEventListener('click', () => closeConfirmModal(true));
+  }
+  if (overlay) {
+    overlay.addEventListener('click', (e) => {
+      if (e.target === overlay) closeConfirmModal(false);
+    });
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && overlay && overlay.classList.contains('open')) {
+      closeConfirmModal(false);
+    }
+  });
+}
+
 async function handleDeleteUser(id) {
   if (!id) return;
   const user = cachedUsersList.find(u => String(u.id) === String(id));
   if (!user) return;
 
   if (currentUser && String(currentUser.id) === String(id)) {
-    alert('Acción denegada: No puedes eliminar tu propia cuenta mientras tienes una sesión activa.');
+    showUsersAlert('error', 'Acción denegada: No puedes eliminar tu propia cuenta en sesión activa.');
+    await showConfirmModal({
+      title: 'Acción Denegada',
+      message: `No puedes eliminar tu propia cuenta (<strong>${escapeHTML(user.nombre)}</strong>) mientras tienes una sesión activa.<br><br><small class="text-muted">Si necesitas eliminar o editar esta cuenta, inicia sesión con otro usuario administrador.</small>`,
+      confirmText: 'Entendido',
+      confirmType: 'primary',
+      icon: '🛡️'
+    });
     return;
   }
 
-  const confirmed = confirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario "${user.nombre}" (Rol: ${user.rol || 'usuario'})?\n\nEsta acción no se puede deshacer.`);
+  const roleText = (user.rol || 'usuario').toLowerCase();
+  const confirmed = await showConfirmModal({
+    title: 'Confirmar Eliminación de Usuario',
+    message: `¿Estás seguro de que deseas eliminar permanentemente al usuario <strong>"${escapeHTML(user.nombre)}"</strong> (Rol: <strong>${escapeHTML(roleText)}</strong>)?<br><br><span style="color: #fb7185; font-size: 12.5px;">⚠️ Esta acción eliminará sus accesos al sistema inmediatamente y no se puede deshacer.</span>`,
+    confirmText: '🗑️ Sí, eliminar',
+    confirmType: 'danger',
+    icon: '🗑️'
+  });
   if (!confirmed) return;
+
+  showUsersAlert('info', `Eliminando usuario "${user.nombre}"...`);
 
   try {
     if (!supabaseClient) initSupabase();
@@ -3413,6 +3505,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   setupEvents();
   setupAuthEvents();
   setupUsersManagementEvents();
+  setupConfirmModalEvents();
   updateActiveFiltersBadge();
 
   const ok = initSupabase();

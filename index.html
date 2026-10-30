@@ -816,6 +816,28 @@
     </div>
   </div>
 
+  <!-- Modal de Confirmación / Alerta de Eliminación -->
+  <div class="modal-overlay confirm-modal-overlay" id="confirm-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="confirm-modal-title">
+    <div class="modal-card modal-card-confirm" id="confirm-modal-card">
+      <div class="confirm-modal-icon-wrapper" id="confirm-modal-icon-wrapper">
+        <span class="confirm-modal-icon" id="confirm-modal-icon">🗑️</span>
+      </div>
+      <div class="confirm-modal-content">
+        <h3 class="confirm-modal-title" id="confirm-modal-title">Confirmar Eliminación</h3>
+        <div class="confirm-modal-message" id="confirm-modal-message">
+          ¿Estás seguro de que deseas eliminar este registro? Esta acción no se puede deshacer.
+        </div>
+      </div>
+      <div class="confirm-modal-actions">
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-confirm-cancel">Cancelar</button>
+        <button type="button" class="btn btn-danger btn-sm" id="btn-confirm-accept">
+          <span id="btn-confirm-text">🗑️ Sí, eliminar</span>
+          <div class="spinner" id="confirm-spinner" style="display: none;"></div>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Login Window Overlay -->
   <div class="login-overlay" id="login-overlay" role="dialog" aria-modal="true" aria-labelledby="login-title">
     <div class="login-card">
