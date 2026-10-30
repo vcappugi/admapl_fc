@@ -1805,6 +1805,7 @@ function updateAuthUI(user) {
   const userBadge = document.getElementById('user-profile-badge');
   const userNameEl = document.getElementById('user-name');
   const userAvatar = document.getElementById('user-avatar');
+  const btnManageUsers = document.getElementById('btn-manage-users');
 
   if (user) {
     currentUser = user;
@@ -1816,6 +1817,16 @@ function updateAuthUI(user) {
       const initials = (user.nombre || 'VC').slice(0, 2).toUpperCase();
       userAvatar.textContent = initials;
     }
+
+    // Activar botón con engranaje SOLO para usuarios con rol 'admin'
+    if (btnManageUsers) {
+      if (user.rol === 'admin') {
+        btnManageUsers.style.display = 'inline-flex';
+        btnManageUsers.title = 'Gestión de Usuarios (Administrador)';
+      } else {
+        btnManageUsers.style.display = 'none';
+      }
+    }
   } else {
     currentUser = null;
     if (dashboard) dashboard.classList.add('blurred');
@@ -1825,6 +1836,7 @@ function updateAuthUI(user) {
       if (passInput) passInput.value = '';
     }
     if (userBadge) userBadge.style.display = 'none';
+    if (btnManageUsers) btnManageUsers.style.display = 'none';
   }
 }
 
@@ -2602,6 +2614,513 @@ async function commitValidCsvRecords() {
   }
 }
 
+// ==============================================================================
+// Users Management CRUD (Solo para Administradores)
+// ==============================================================================
+let cachedUsersList = [];
+
+function setupUsersManagementEvents() {
+  const btnManageUsers = document.getElementById('btn-manage-users');
+  const modalOverlay = document.getElementById('users-modal-overlay');
+  const modalClose = document.getElementById('users-modal-close');
+  const btnCloseModal = document.getElementById('btn-close-users-modal');
+  const btnOpenCreate = document.getElementById('btn-open-user-create');
+  const btnCloseForm = document.getElementById('btn-close-user-form');
+  const btnCancelForm = document.getElementById('btn-cancel-user-form');
+  const btnRefresh = document.getElementById('btn-users-refresh');
+  const searchInput = document.getElementById('users-search-input');
+  const userForm = document.getElementById('user-crud-form');
+  const btnTogglePass = document.getElementById('btn-toggle-user-pass');
+  const inputPass = document.getElementById('user-input-clave');
+  const tableBody = document.getElementById('users-table-body');
+
+  if (!btnManageUsers) return;
+
+  // Abrir Modal de Usuarios (Solo Administradores)
+  btnManageUsers.addEventListener('click', async () => {
+    if (!currentUser || currentUser.rol !== 'admin') {
+      alert('Acceso restringido: Esta sección solo está disponible para usuarios con rol "admin".');
+      return;
+    }
+    if (modalOverlay) {
+      modalOverlay.classList.add('active');
+      modalOverlay.style.display = 'flex';
+      closeUserForm();
+      if (searchInput) searchInput.value = '';
+      await loadUsersList();
+    }
+  });
+
+  // Cerrar Modal
+  const closeUsersModal = () => {
+    if (modalOverlay) {
+      modalOverlay.classList.remove('active');
+      modalOverlay.style.display = 'none';
+    }
+    closeUserForm();
+    hideUsersAlert();
+  };
+
+  if (modalClose) modalClose.addEventListener('click', closeUsersModal);
+  if (btnCloseModal) btnCloseModal.addEventListener('click', closeUsersModal);
+  if (modalOverlay) {
+    modalOverlay.addEventListener('click', (e) => {
+      if (e.target === modalOverlay) closeUsersModal();
+    });
+  }
+
+  // Toggle visualización de contraseña
+  if (btnTogglePass && inputPass) {
+    btnTogglePass.addEventListener('click', () => {
+      const isPass = inputPass.type === 'password';
+      inputPass.type = isPass ? 'text' : 'password';
+      btnTogglePass.textContent = isPass ? '🙈' : '👁️';
+    });
+  }
+
+  // Abrir Formulario Crear Usuario
+  if (btnOpenCreate) {
+    btnOpenCreate.addEventListener('click', () => {
+      openUserForm(null);
+    });
+  }
+
+  // Cerrar Formulario
+  const closeUserForm = () => {
+    const formCard = document.getElementById('user-form-card');
+    if (formCard) formCard.style.display = 'none';
+    if (userForm) userForm.reset();
+    const idInput = document.getElementById('user-input-id');
+    if (idInput) idInput.value = '';
+    hideUsersAlert();
+  };
+
+  if (btnCloseForm) btnCloseForm.addEventListener('click', closeUserForm);
+  if (btnCancelForm) btnCancelForm.addEventListener('click', closeUserForm);
+
+  // Recargar Lista de Usuarios
+  if (btnRefresh) {
+    btnRefresh.addEventListener('click', async () => {
+      btnRefresh.disabled = true;
+      btnRefresh.textContent = '⏳ Cargando...';
+      await loadUsersList(searchInput ? searchInput.value : '');
+      btnRefresh.disabled = false;
+      btnRefresh.textContent = '🔄 Actualizar';
+    });
+  }
+
+  // Búsqueda en vivo
+  if (searchInput) {
+    let searchTimer;
+    searchInput.addEventListener('input', (e) => {
+      clearTimeout(searchTimer);
+      searchTimer = setTimeout(() => {
+        renderUsersTable(filterUsers(e.target.value));
+      }, 250);
+    });
+  }
+
+  // Guardar Usuario (Submit Form)
+  if (userForm) {
+    userForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      await handleSaveUser();
+    });
+  }
+
+  // Delegación de clicks en la tabla (Editar / Eliminar)
+  if (tableBody) {
+    tableBody.addEventListener('click', async (e) => {
+      const editBtn = e.target.closest('.btn-edit-user');
+      if (editBtn) {
+        const id = editBtn.getAttribute('data-id');
+        const user = cachedUsersList.find(u => String(u.id) === String(id));
+        if (user) openUserForm(user);
+        return;
+      }
+
+      const deleteBtn = e.target.closest('.btn-delete-user');
+      if (deleteBtn) {
+        const id = deleteBtn.getAttribute('data-id');
+        await handleDeleteUser(id);
+      }
+    });
+  }
+}
+
+async function loadUsersList(searchFilter = '') {
+  const tableBody = document.getElementById('users-table-body');
+  const countSummary = document.getElementById('users-count-summary');
+  if (tableBody) {
+    tableBody.innerHTML = '<tr><td colspan="5" class="table-empty"><div class="spinner" style="margin: 0 auto 8px;"></div>Cargando usuarios desde Supabase...</td></tr>';
+  }
+
+  try {
+    let users = [];
+
+    // 1. Consultar directamente a Supabase
+    if (!supabaseClient) initSupabase();
+
+    if (supabaseClient) {
+      const { data, error } = await supabaseClient
+        .from('usuarios')
+        .select('id, nombre, rol, created_at')
+        .order('id', { ascending: true });
+
+      if (!error && Array.isArray(data)) {
+        users = data;
+      } else if (error) {
+        console.warn('Error consultando usuarios en Supabase:', error);
+      }
+    }
+
+    // 2. Respaldo vía PHP si Supabase directo no devolvió datos
+    if (users.length === 0) {
+      try {
+        const resp = await fetch('crud_usuarios.php?action=list');
+        if (resp.ok) {
+          const resJson = await resp.json();
+          if (resJson.success && Array.isArray(resJson.data)) {
+            users = resJson.data;
+          }
+        }
+      } catch (_) {}
+    }
+
+    cachedUsersList = users;
+    renderUsersTable(filterUsers(searchFilter));
+
+  } catch (err) {
+    console.error('Error al cargar lista de usuarios:', err);
+    if (tableBody) {
+      tableBody.innerHTML = `<tr><td colspan="5" class="table-empty text-danger">Error al cargar usuarios: ${escapeHTML(err.message || err)}</td></tr>`;
+    }
+  }
+}
+
+function filterUsers(term = '') {
+  const q = (term || '').trim().toLowerCase();
+  if (!q) return cachedUsersList;
+  return cachedUsersList.filter(u => 
+    (u.nombre && u.nombre.toLowerCase().includes(q)) ||
+    (u.rol && u.rol.toLowerCase().includes(q)) ||
+    String(u.id).includes(q)
+  );
+}
+
+function renderUsersTable(users) {
+  const tableBody = document.getElementById('users-table-body');
+  const countSummary = document.getElementById('users-count-summary');
+  if (!tableBody) return;
+
+  if (countSummary) {
+    countSummary.textContent = `${users.length} usuario${users.length !== 1 ? 's' : ''} registrado${users.length !== 1 ? 's' : ''}`;
+  }
+
+  if (users.length === 0) {
+    tableBody.innerHTML = '<tr><td colspan="5" class="table-empty">No se encontraron usuarios registrados.</td></tr>';
+    return;
+  }
+
+  const rowsHtml = users.map(u => {
+    const isCurrent = currentUser && String(currentUser.id) === String(u.id);
+    const initials = (u.nombre || 'U').slice(0, 2).toUpperCase();
+    const role = (u.rol || 'usuario').toLowerCase();
+    const roleBadge = role === 'admin' 
+      ? '<span class="user-role-badge admin">👑 admin</span>'
+      : '<span class="user-role-badge usuario">👤 usuario</span>';
+
+    let dateStr = '--';
+    if (u.created_at) {
+      try {
+        const d = new Date(u.created_at);
+        dateStr = d.toLocaleDateString('es-VE', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+      } catch (_) {
+        dateStr = String(u.created_at);
+      }
+    }
+
+    return `
+      <tr>
+        <td style="font-family: var(--font-mono); color: var(--text-muted); font-size: 12px;">#${u.id}</td>
+        <td>
+          <div style="display: flex; align-items: center;">
+            <div class="user-avatar-sm">${escapeHTML(initials)}</div>
+            <strong>${escapeHTML(u.nombre)}</strong>
+            ${isCurrent ? '<span style="margin-left: 8px; font-size: 10px; background: rgba(16, 185, 129, 0.15); color: #34d399; padding: 2px 6px; border-radius: 4px; font-weight: 600;">(Tú)</span>' : ''}
+          </div>
+        </td>
+        <td>${roleBadge}</td>
+        <td style="font-size: 12px; color: var(--text-muted);">${escapeHTML(dateStr)}</td>
+        <td style="text-align: center;">
+          <button type="button" class="btn btn-secondary btn-xs btn-edit-user" data-id="${u.id}" title="Editar usuario">
+            ✏️ Editar
+          </button>
+          <button type="button" class="btn btn-secondary btn-xs btn-delete-user" data-id="${u.id}" ${isCurrent ? 'disabled title="No puedes eliminar tu propia cuenta en sesión"' : 'title="Eliminar usuario"'} style="margin-left: 4px;">
+            🗑️ Eliminar
+          </button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  tableBody.innerHTML = rowsHtml;
+}
+
+function openUserForm(user = null) {
+  const formCard = document.getElementById('user-form-card');
+  const titleEl = document.getElementById('user-form-title');
+  const inputId = document.getElementById('user-input-id');
+  const inputNombre = document.getElementById('user-input-nombre');
+  const inputClave = document.getElementById('user-input-clave');
+  const inputRol = document.getElementById('user-input-rol');
+  const claveRequiredLabel = document.getElementById('user-clave-required-label');
+  const claveHint = document.getElementById('user-clave-hint');
+  const saveBtnText = document.getElementById('btn-save-user-text');
+
+  if (!formCard) return;
+
+  hideUsersAlert();
+
+  if (user) {
+    // Modo Edición
+    titleEl.textContent = `✏️ Editar Usuario: ${user.nombre}`;
+    inputId.value = user.id;
+    inputNombre.value = user.nombre || '';
+    inputClave.value = '';
+    inputClave.required = false;
+    if (claveRequiredLabel) claveRequiredLabel.textContent = '';
+    if (claveHint) claveHint.style.display = 'block';
+    if (inputRol) inputRol.value = (user.rol === 'admin') ? 'admin' : 'usuario';
+    if (saveBtnText) saveBtnText.textContent = '💾 Actualizar Usuario';
+  } else {
+    // Modo Creación
+    titleEl.textContent = '➕ Crear Nuevo Usuario';
+    inputId.value = '';
+    inputNombre.value = '';
+    inputClave.value = '';
+    inputClave.required = true;
+    if (claveRequiredLabel) claveRequiredLabel.textContent = '*';
+    if (claveHint) claveHint.style.display = 'none';
+    if (inputRol) inputRol.value = 'usuario';
+    if (saveBtnText) saveBtnText.textContent = '💾 Crear Usuario';
+  }
+
+  formCard.style.display = 'block';
+  formCard.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  if (inputNombre) inputNombre.focus();
+}
+
+async function handleSaveUser() {
+  const inputId = document.getElementById('user-input-id');
+  const inputNombre = document.getElementById('user-input-nombre');
+  const inputClave = document.getElementById('user-input-clave');
+  const inputRol = document.getElementById('user-input-rol');
+  const saveBtn = document.getElementById('btn-save-user');
+  const spinner = document.getElementById('user-save-spinner');
+  const saveBtnText = document.getElementById('btn-save-user-text');
+
+  const id = (inputId?.value || '').trim();
+  const nombre = (inputNombre?.value || '').trim();
+  const clave = (inputClave?.value || '').trim();
+  const rol = (inputRol?.value || 'usuario').trim().toLowerCase();
+
+  if (!nombre) {
+    showUsersAlert('error', 'El nombre de usuario es obligatorio.');
+    if (inputNombre) inputNombre.focus();
+    return;
+  }
+
+  // Validación estricta: solo 'admin' y 'usuario'
+  if (rol !== 'admin' && rol !== 'usuario') {
+    showUsersAlert('error', "El campo rol solo puede tener dos opciones: 'admin' y 'usuario'.");
+    return;
+  }
+
+  if (!id && !clave) {
+    showUsersAlert('error', 'La contraseña es obligatoria para nuevos usuarios.');
+    if (inputClave) inputClave.focus();
+    return;
+  }
+
+  if (clave && clave.length < 4) {
+    showUsersAlert('error', 'La contraseña debe tener al menos 4 caracteres.');
+    if (inputClave) inputClave.focus();
+    return;
+  }
+
+  if (saveBtn) saveBtn.disabled = true;
+  if (spinner) spinner.style.display = 'inline-block';
+  if (saveBtnText) saveBtnText.textContent = 'Guardando...';
+
+  try {
+    let passHash = null;
+    if (clave) {
+      const bcryptObj = (typeof dcodeIO !== 'undefined' && dcodeIO.bcrypt) 
+        ? dcodeIO.bcrypt 
+        : (typeof window.bcrypt !== 'undefined' ? window.bcrypt : null);
+      if (bcryptObj) {
+        const salt = bcryptObj.genSaltSync(10);
+        passHash = bcryptObj.hashSync(clave, salt);
+      } else {
+        passHash = clave;
+      }
+    }
+
+    if (!supabaseClient) initSupabase();
+
+    if (id) {
+      // UPDATE
+      const updatePayload = { nombre, rol };
+      if (passHash) updatePayload.clave = passHash;
+
+      if (supabaseClient) {
+        const { error: supErr } = await supabaseClient
+          .from('usuarios')
+          .update(updatePayload)
+          .eq('id', id);
+
+        if (supErr) throw new Error(supErr.message || 'Error al actualizar usuario en Supabase');
+      }
+
+      // Sincronizar SQLite silenciosamente
+      fetch('crud_usuarios.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'update', id: parseInt(id, 10), nombre, rol, clave: clave || '' })
+      }).catch(() => {});
+
+      // Si el usuario editado es el que tiene la sesión activa, actualizar
+      if (currentUser && String(currentUser.id) === String(id)) {
+        currentUser.nombre = nombre;
+        currentUser.rol = rol;
+        const stored = getStoredAuth();
+        if (stored && stored.user) {
+          stored.user.nombre = nombre;
+          stored.user.rol = rol;
+          if (localStorage.getItem('flujocaja_auth')) {
+            localStorage.setItem('flujocaja_auth', JSON.stringify(stored));
+          } else {
+            sessionStorage.setItem('flujocaja_auth', JSON.stringify(stored));
+          }
+        }
+        updateAuthUI(currentUser);
+      }
+
+      showUsersAlert('success', `Usuario "${nombre}" actualizado exitosamente.`);
+
+    } else {
+      // CREATE
+      const existing = cachedUsersList.find(u => u.nombre && u.nombre.toLowerCase() === nombre.toLowerCase());
+      if (existing) {
+        throw new Error(`Ya existe un usuario con el nombre "${nombre}".`);
+      }
+
+      if (supabaseClient) {
+        const { data: newRow, error: supErr } = await supabaseClient
+          .from('usuarios')
+          .insert([{
+            nombre,
+            clave: passHash,
+            rol,
+            created_at: new Date().toISOString()
+          }])
+          .select();
+
+        if (supErr) throw new Error(supErr.message || 'Error al crear usuario en Supabase');
+      }
+
+      // Sincronizar SQLite silenciosamente
+      fetch('crud_usuarios.php', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'create', nombre, rol, clave: clave })
+      }).catch(() => {});
+
+      showUsersAlert('success', `Usuario "${nombre}" con rol "${rol}" creado exitosamente.`);
+    }
+
+    // Ocultar formulario
+    const formCard = document.getElementById('user-form-card');
+    if (formCard) formCard.style.display = 'none';
+    const userForm = document.getElementById('user-crud-form');
+    if (userForm) userForm.reset();
+    document.getElementById('user-input-id').value = '';
+
+    const searchInput = document.getElementById('users-search-input');
+    await loadUsersList(searchInput ? searchInput.value : '');
+
+  } catch (err) {
+    console.error('Error al guardar usuario:', err);
+    showUsersAlert('error', err.message || 'Error al procesar el usuario.');
+  } finally {
+    if (saveBtn) saveBtn.disabled = false;
+    if (spinner) spinner.style.display = 'none';
+    if (saveBtnText) saveBtnText.textContent = id ? '💾 Actualizar Usuario' : '💾 Crear Usuario';
+  }
+}
+
+async function handleDeleteUser(id) {
+  if (!id) return;
+  const user = cachedUsersList.find(u => String(u.id) === String(id));
+  if (!user) return;
+
+  if (currentUser && String(currentUser.id) === String(id)) {
+    alert('Acción denegada: No puedes eliminar tu propia cuenta mientras tienes una sesión activa.');
+    return;
+  }
+
+  const confirmed = confirm(`¿Estás seguro de que deseas eliminar permanentemente al usuario "${user.nombre}" (Rol: ${user.rol || 'usuario'})?\n\nEsta acción no se puede deshacer.`);
+  if (!confirmed) return;
+
+  try {
+    if (!supabaseClient) initSupabase();
+
+    if (supabaseClient) {
+      const { error: supErr } = await supabaseClient
+        .from('usuarios')
+        .delete()
+        .eq('id', id);
+
+      if (supErr) throw new Error(supErr.message || 'Error al eliminar usuario en Supabase');
+    }
+
+    // Sincronizar SQLite silenciosamente
+    fetch('crud_usuarios.php', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'delete', id: parseInt(id, 10) })
+    }).catch(() => {});
+
+    showUsersAlert('success', `Usuario "${user.nombre}" eliminado correctamente.`);
+    const searchInput = document.getElementById('users-search-input');
+    await loadUsersList(searchInput ? searchInput.value : '');
+
+  } catch (err) {
+    console.error('Error al eliminar usuario:', err);
+    showUsersAlert('error', err.message || 'Error al eliminar usuario.');
+  }
+}
+
+function showUsersAlert(type, message) {
+  const alertEl = document.getElementById('users-modal-alert');
+  const alertText = document.getElementById('users-modal-alert-text');
+  const alertIcon = document.getElementById('users-modal-alert-icon');
+  if (!alertEl || !alertText) return;
+
+  alertEl.className = `modal-alert ${type}`;
+  alertText.textContent = message;
+  if (alertIcon) {
+    alertIcon.textContent = type === 'success' ? '✅' : (type === 'error' ? '❌' : 'ℹ️');
+  }
+  alertEl.style.display = 'flex';
+}
+
+function hideUsersAlert() {
+  const alertEl = document.getElementById('users-modal-alert');
+  if (alertEl) alertEl.style.display = 'none';
+}
+
 function setupAuthEvents() {
   const loginForm = document.getElementById('login-form');
   const usernameInput = document.getElementById('login-username');
@@ -2681,7 +3200,7 @@ function setupAuthEvents() {
           if (supabaseClient) {
             const { data: users, error: supErr } = await supabaseClient
               .from('usuarios')
-              .select('id, nombre, clave, created_at')
+              .select('id, nombre, clave, rol, created_at')
               .eq('nombre', usuario)
               .limit(1);
 
@@ -2721,6 +3240,7 @@ function setupAuthEvents() {
                   user: {
                     id: u.id,
                     nombre: u.nombre,
+                    rol: u.rol || 'usuario',
                     created_at: u.created_at
                   }
                 };
@@ -2787,6 +3307,7 @@ function setupAuthEvents() {
 document.addEventListener('DOMContentLoaded', async () => {
   setupEvents();
   setupAuthEvents();
+  setupUsersManagementEvents();
   updateActiveFiltersBadge();
 
   const ok = initSupabase();
@@ -2796,7 +3317,29 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   const storedAuth = getStoredAuth();
   if (storedAuth && storedAuth.user) {
-    // Session exists
+    // Si el rol no estaba almacenado en caché, refrescarlo desde Supabase
+    if (!storedAuth.user.rol && supabaseClient) {
+      try {
+        const { data: uInfo } = await supabaseClient
+          .from('usuarios')
+          .select('rol')
+          .eq('id', storedAuth.user.id)
+          .single();
+        if (uInfo && uInfo.rol) {
+          storedAuth.user.rol = uInfo.rol;
+          if (localStorage.getItem('flujocaja_auth')) {
+            localStorage.setItem('flujocaja_auth', JSON.stringify(storedAuth));
+          } else {
+            sessionStorage.setItem('flujocaja_auth', JSON.stringify(storedAuth));
+          }
+        }
+      } catch (_) {}
+    }
+    // Asignar rol admin para vcappugi por defecto si faltara
+    if (!storedAuth.user.rol && storedAuth.user.nombre === 'vcappugi') {
+      storedAuth.user.rol = 'admin';
+    }
+
     updateAuthUI(storedAuth.user);
     await loadSummaryData();
     await fetchTableData();

@@ -61,6 +61,9 @@
         <div class="user-profile-badge" id="user-profile-badge" style="display: none;">
           <div class="user-avatar" id="user-avatar">VC</div>
           <span class="user-name" id="user-name">vcappugi</span>
+          <button class="btn btn-secondary btn-sm btn-gear-admin" id="btn-manage-users" title="Gestión de Usuarios (Solo Administradores)" style="display: none;" aria-label="Gestión de Usuarios">
+            ⚙️
+          </button>
           <button class="btn btn-secondary btn-sm" id="btn-logout" title="Cerrar Sesión">
             🚪 Salir
           </button>
@@ -693,6 +696,120 @@
           </button>
         </div>
       </div>
+    </div>
+  <!-- Modal de Gestión de Usuarios (CRUD para Administradores) -->
+  <div class="modal-overlay" id="users-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="users-modal-title">
+    <div class="modal-card modal-card-lg" id="users-modal-card">
+      <div class="modal-header">
+        <div class="modal-header-text">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <h2 class="modal-title" id="users-modal-title">⚙️ Gestión de Usuarios</h2>
+            <span class="user-role-badge admin">Solo Admin</span>
+          </div>
+          <p class="modal-subtitle">Administra los accesos y roles del sistema (Tabla: <code>usuarios</code> en Supabase)</p>
+        </div>
+        <button type="button" class="modal-close" id="users-modal-close" aria-label="Cerrar modal">&times;</button>
+      </div>
+
+      <div class="modal-body users-modal-body">
+        
+        <!-- Alerta de Notificaciones en Modal -->
+        <div class="modal-alert" id="users-modal-alert" style="display: none;">
+          <span id="users-modal-alert-icon">ℹ️</span>
+          <span id="users-modal-alert-text"></span>
+        </div>
+
+        <!-- Formulario Crear/Editar Usuario (Colapsable/Toggle) -->
+        <div class="user-form-card" id="user-form-card" style="display: none;">
+          <div class="user-form-header">
+            <h4 class="user-form-title" id="user-form-title">➕ Crear Nuevo Usuario</h4>
+            <button type="button" class="btn-text-sm" id="btn-close-user-form" title="Cerrar formulario">✕</button>
+          </div>
+          <form id="user-crud-form">
+            <input type="hidden" id="user-input-id">
+            <div class="user-form-grid">
+              <div class="form-group">
+                <label class="form-label" for="user-input-nombre">Nombre de Usuario *</label>
+                <div class="input-with-icon">
+                  <span class="field-icon">👤</span>
+                  <input type="text" id="user-input-nombre" class="input-field" placeholder="Ej: analista_finanzas" required autocomplete="off">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="user-input-clave">
+                  Contraseña <span id="user-clave-required-label">*</span>
+                </label>
+                <div class="input-with-icon">
+                  <span class="field-icon">🔒</span>
+                  <input type="password" id="user-input-clave" class="input-field" placeholder="Mínimo 4 caracteres" autocomplete="new-password">
+                  <button type="button" class="btn-toggle-pass" id="btn-toggle-user-pass" title="Mostrar/ocultar contraseña" aria-label="Mostrar u ocultar">👁️</button>
+                </div>
+                <small class="field-hint" id="user-clave-hint" style="display: none;">Dejar en blanco para conservar la contraseña actual.</small>
+              </div>
+
+              <div class="form-group">
+                <label class="form-label" for="user-input-rol">Rol en el Sistema *</label>
+                <select id="user-input-rol" class="select-field" required>
+                  <option value="usuario">usuario</option>
+                  <option value="admin">admin</option>
+                </select>
+              </div>
+            </div>
+
+            <div class="user-form-actions">
+              <button type="button" class="btn btn-secondary btn-sm" id="btn-cancel-user-form">Cancelar</button>
+              <button type="submit" class="btn btn-primary btn-sm" id="btn-save-user">
+                <span id="btn-save-user-text">💾 Guardar Usuario</span>
+                <div class="spinner" id="user-save-spinner" style="display: none;"></div>
+              </button>
+            </div>
+          </form>
+        </div>
+
+        <!-- Barra de Herramientas de la Lista de Usuarios -->
+        <div class="users-toolbar">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-open-user-create">
+            ➕ Nuevo Usuario
+          </button>
+          
+          <div class="users-search-wrapper">
+            <span class="search-icon">🔍</span>
+            <input type="text" id="users-search-input" class="input-field" placeholder="Buscar por nombre o rol..." autocomplete="off">
+          </div>
+
+          <button type="button" class="btn btn-secondary btn-sm" id="btn-users-refresh" title="Recargar lista de usuarios">
+            🔄 Actualizar
+          </button>
+        </div>
+
+        <!-- Tabla de Usuarios -->
+        <div class="table-responsive users-table-wrapper">
+          <table class="data-table" id="users-table">
+            <thead>
+              <tr>
+                <th style="width: 70px;">ID</th>
+                <th>Usuario</th>
+                <th style="width: 140px;">Rol</th>
+                <th>Fecha Creación</th>
+                <th style="width: 170px; text-align: center;">Acciones</th>
+              </tr>
+            </thead>
+            <tbody id="users-table-body">
+              <tr>
+                <td colspan="5" class="table-empty">Cargando usuarios...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+      </div>
+
+      <div class="modal-footer" style="display: flex; justify-content: space-between; align-items: center;">
+        <span class="text-muted" id="users-count-summary" style="font-size: 12px;">0 usuarios registrados</span>
+        <button type="button" class="btn btn-secondary btn-sm" id="btn-close-users-modal">Cerrar</button>
+      </div>
+
     </div>
   </div>
 

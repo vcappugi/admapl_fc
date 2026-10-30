@@ -49,7 +49,7 @@ if ($action === 'login') {
     $userRecord = null;
 
     // A. Query Supabase directly
-    $apiUrl = $supabaseUrl . '/rest/v1/usuarios?nombre=eq.' . urlencode($usuario) . '&select=id,nombre,clave,created_at&limit=1';
+    $apiUrl = $supabaseUrl . '/rest/v1/usuarios?nombre=eq.' . urlencode($usuario) . '&select=id,nombre,clave,rol,created_at&limit=1';
     $ch = curl_init($apiUrl);
     curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
     curl_setopt($ch, CURLOPT_HTTPHEADER, [
@@ -75,7 +75,7 @@ if ($action === 'login') {
         if (file_exists($dbPath)) {
             try {
                 $pdo = new PDO("sqlite:" . $dbPath);
-                $stmt = $pdo->prepare("SELECT id, nombre, clave, created_at FROM usuarios WHERE nombre = :nombre LIMIT 1");
+                $stmt = $pdo->prepare("SELECT id, nombre, clave, rol, created_at FROM usuarios WHERE nombre = :nombre LIMIT 1");
                 $stmt->execute([':nombre' => $usuario]);
                 $userRecord = $stmt->fetch(PDO::FETCH_ASSOC);
             } catch (Exception $e) {
@@ -100,6 +100,7 @@ if ($action === 'login') {
             'user' => [
                 'id' => $userRecord['id'],
                 'nombre' => $userRecord['nombre'],
+                'rol' => $userRecord['rol'] ?? 'usuario',
                 'created_at' => $userRecord['created_at']
             ]
         ]);
