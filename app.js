@@ -64,18 +64,31 @@ const formatDate = (dateStr) => {
   return dateStr;
 };
 
-// Initialize Supabase Client
+// Función auxiliar para desencriptar y obtener credenciales desde configsb.js
+function getSupabaseConfig() {
+  if (window.CONFIG_SB && typeof window.CONFIG_SB.getCredentials === 'function') {
+    return window.CONFIG_SB.getCredentials();
+  }
+  if (window.CONFIG) {
+    return window.CONFIG;
+  }
+  return null;
+}
+
+// Initialize Supabase Client (Desencripta las credenciales de configsb.js en runtime)
 function initSupabase() {
-  if (!window.CONFIG || !window.CONFIG.SUPABASE_URL || !window.CONFIG.SUPABASE_KEY) {
-    console.error('Configuración de Supabase no encontrada en config.js');
+  const config = getSupabaseConfig();
+  if (!config || !config.SUPABASE_URL || !config.SUPABASE_KEY) {
+    console.error('Configuración de Supabase no encontrada o no se pudo desencriptar desde configsb.js');
     showStatus(false, 'Error de Configuración');
     return false;
   }
   try {
     supabaseClient = window.supabase.createClient(
-      window.CONFIG.SUPABASE_URL,
-      window.CONFIG.SUPABASE_KEY
+      config.SUPABASE_URL,
+      config.SUPABASE_KEY
     );
+    console.log('✅ Supabase Client inicializado exitosamente con credenciales desencriptadas desde configsb.js');
     return true;
   } catch (err) {
     console.error('Error inicializando Supabase Client:', err);
@@ -83,6 +96,7 @@ function initSupabase() {
     return false;
   }
 }
+
 
 // Check Connection & Latency
 async function checkSupabaseConnection() {
@@ -1182,15 +1196,64 @@ function setupModalCrudEvents() {
           texto: (document.getElementById('modal-input-texto')?.value || '').trim()
         };
 
-        const resp = await fetch('crud_movimiento.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
+        let res = null;
+        try {
+          const resp = await fetch('crud_movimiento.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+          if (resp.ok) {
+            res = await resp.json();
+          }
+        } catch (phpErr) {
+          console.warn('crud_movimiento.php no disponible (modo Vercel). Actualizando directamente en Supabase...', phpErr);
+        }
 
-        const res = await resp.json();
+        // Respaldo directo en Supabase (para despliegue en Vercel)
+        if (!res || !res.success) {
+          if (supabaseClient) {
+            const updateData = {
+              fecha: payload.fecha,
+              es: payload.es,
+              monto: payload.monto,
+              medio_ejecucion: payload.medio_ejecucion,
+              clasificacion: payload.clasificacion,
+              referencia: payload.referencia,
+              tasa: payload.tasa,
+              bcv_sap: payload.bcv_sap,
+              division: payload.division,
+              mes: payload.mes,
+              año: payload.año,
+              beneficiario: payload.beneficiario,
+              concepto: payload.concepto,
+              concepto1: payload.concepto1,
+              texto: payload.texto
+            };
+            const { error: supUpdateErr } = await supabaseClient
+              .from('fc_mov')
+              .update(updateData)
+              .eq('id', id);
 
-        if (resp.ok && res.success) {
+            if (!supUpdateErr) {
+              res = { success: true };
+              try {
+                await supabaseClient.from('control_cambios').insert({
+                  tabla_afectada: 'fc_mov',
+                  registro_id: id,
+                  operacion: 'UPDATE',
+                  usuario_id: userId,
+                  detalles_json: JSON.stringify(updateData),
+                  created_at: new Date().toISOString()
+                });
+              } catch (_) {}
+            } else {
+              res = { success: false, error: supUpdateErr.message };
+            }
+          }
+        }
+
+        if (res && res.success) {
           showModalAlert('success', `Movimiento #${id} actualizado correctamente. Registrado en control_cambios.`);
           
           // Refresh table data and analytics in real time
@@ -1201,7 +1264,7 @@ function setupModalCrudEvents() {
             closeTransactionModal();
           }, 1200);
         } else {
-          showModalAlert('error', res.error || 'Error al actualizar el movimiento.');
+          showModalAlert('error', (res && res.error) || 'Error al actualizar el movimiento.');
         }
       } catch (err) {
         console.error('Error al guardar movimiento:', err);
@@ -1234,19 +1297,51 @@ function setupModalCrudEvents() {
         const auth = getStoredAuth();
         const userId = auth && auth.user ? auth.user.id : 2;
 
-        const resp = await fetch('crud_movimiento.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'delete',
-            usuario_id: userId,
-            id: id
-          })
-        });
+        let res = null;
+        try {
+          const resp = await fetch('crud_movimiento.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'delete',
+              usuario_id: userId,
+              id: id
+            })
+          });
+          if (resp.ok) {
+            res = await resp.json();
+          }
+        } catch (phpErr) {
+          console.warn('crud_movimiento.php no disponible (modo Vercel). Eliminando directamente en Supabase...', phpErr);
+        }
 
-        const res = await resp.json();
+        // Respaldo directo en Supabase (para despliegue en Vercel)
+        if (!res || !res.success) {
+          if (supabaseClient) {
+            const { error: supDelErr } = await supabaseClient
+              .from('fc_mov')
+              .delete()
+              .eq('id', id);
 
-        if (resp.ok && res.success) {
+            if (!supDelErr) {
+              res = { success: true };
+              try {
+                await supabaseClient.from('control_cambios').insert({
+                  tabla_afectada: 'fc_mov',
+                  registro_id: id,
+                  operacion: 'DELETE',
+                  usuario_id: userId,
+                  detalles_json: JSON.stringify({ id: id }),
+                  created_at: new Date().toISOString()
+                });
+              } catch (_) {}
+            } else {
+              res = { success: false, error: supDelErr.message };
+            }
+          }
+        }
+
+        if (res && res.success) {
           showModalAlert('success', `Movimiento #${id} eliminado correctamente.`);
 
           // Refresh table data and analytics
@@ -1257,7 +1352,7 @@ function setupModalCrudEvents() {
             closeTransactionModal();
           }, 1200);
         } else {
-          showModalAlert('error', res.error || 'Error al eliminar el movimiento.');
+          showModalAlert('error', (res && res.error) || 'Error al eliminar el movimiento.');
           deleteBtn.disabled = false;
           deleteBtn.innerHTML = '🗑️ Eliminar Movimiento';
         }
@@ -1847,35 +1942,116 @@ function setupAuthEvents() {
       if (errorBox) errorBox.style.display = 'none';
 
       try {
-        const resp = await fetch('login.php', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'login',
-            usuario: usuario,
-            clave: clave
-          })
-        });
+        let authResult = null;
+        let isSuccess = false;
 
-        const data = await resp.json();
+        // Intentar primero con backend PHP (para entorno local Apache / XAMPP)
+        try {
+          const resp = await fetch('login.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'login',
+              usuario: usuario,
+              clave: clave
+            })
+          });
 
-        if (resp.ok && data.success && data.user) {
-          // Success
-          if (rememberCheckbox && rememberCheckbox.checked) {
-            localStorage.setItem('flujocaja_auth', JSON.stringify(data));
-          } else {
-            sessionStorage.setItem('flujocaja_auth', JSON.stringify(data));
+          if (resp.ok) {
+            const data = await resp.json();
+            if (data && data.success && data.user) {
+              authResult = data;
+              isSuccess = true;
+            } else if (data && data.error) {
+              showLoginError(data.error);
+              return;
+            }
+          }
+        } catch (phpErr) {
+          console.warn('login.php no disponible (despliegue estático / Vercel). Verificando directamente contra Supabase...', phpErr);
+        }
+
+        // Si login.php no respondió (despliegue en Vercel sin PHP), consultar Supabase directamente
+        if (!isSuccess) {
+          if (!supabaseClient) {
+            initSupabase();
           }
 
-          updateAuthUI(data.user);
+          if (supabaseClient) {
+            const { data: users, error: supErr } = await supabaseClient
+              .from('usuarios')
+              .select('id, nombre, clave, created_at')
+              .eq('nombre', usuario)
+              .limit(1);
+
+            if (supErr) {
+              console.error('Error al consultar usuarios en Supabase:', supErr);
+              showLoginError('Error al contactar con la base de datos de Supabase.');
+              return;
+            }
+
+            if (users && users.length > 0) {
+              const u = users[0];
+              let match = false;
+
+              // Si bcryptjs está disponible, validar hash
+              const bcryptObj = (typeof dcodeIO !== 'undefined' && dcodeIO.bcrypt) 
+                ? dcodeIO.bcrypt 
+                : (typeof window.bcrypt !== 'undefined' ? window.bcrypt : null);
+
+              if (bcryptObj && u.clave) {
+                try {
+                  const normalizedHash = u.clave.replace(/^\$2y\$/, '$2a$');
+                  match = bcryptObj.compareSync(clave, normalizedHash);
+                } catch (bErr) {
+                  console.warn('Error verificando bcrypt:', bErr);
+                }
+              }
+
+              // Comparación directa en texto plano como respaldo
+              if (!match && u.clave === clave) {
+                match = true;
+              }
+
+              if (match) {
+                isSuccess = true;
+                authResult = {
+                  success: true,
+                  user: {
+                    id: u.id,
+                    nombre: u.nombre,
+                    created_at: u.created_at
+                  }
+                };
+              } else {
+                showLoginError('Usuario o clave incorrectos.');
+                return;
+              }
+            } else {
+              showLoginError('Usuario o clave incorrectos.');
+              return;
+            }
+          } else {
+            showLoginError('No se pudo conectar a Supabase. Verifique las credenciales desencriptadas.');
+            return;
+          }
+        }
+
+        if (isSuccess && authResult && authResult.user) {
+          // Success
+          if (rememberCheckbox && rememberCheckbox.checked) {
+            localStorage.setItem('flujocaja_auth', JSON.stringify(authResult));
+          } else {
+            sessionStorage.setItem('flujocaja_auth', JSON.stringify(authResult));
+          }
+
+          updateAuthUI(authResult.user);
 
           // Initialize Dashboard data if not already loaded
           if (!currentSummary) {
             await loadSummaryData();
             await fetchTableData();
           }
-        } else {
-          showLoginError(data.error || 'Usuario o clave incorrectos.');
         }
       } catch (err) {
         console.error('Error de autenticación:', err);
