@@ -3390,8 +3390,11 @@ function setupAuthEvents() {
 
   // Handle Logout
   if (logoutBtn) {
-    logoutBtn.addEventListener('click', () => {
+    logoutBtn.addEventListener('click', async () => {
       clearUserSession();
+      try {
+        await fetch('login.php?action=logout');
+      } catch (_) {}
       updateAuthUI(null);
       if (usernameInput) usernameInput.focus();
     });
