@@ -138,60 +138,129 @@
 
     </section>
 
-    <!-- Filters Section -->
-    <section class="filter-section" id="filter-section" aria-label="Filtros de Búsqueda">
+    <!-- Unified Collapsible Filters Section (Expanded by Default) -->
+    <section class="filter-section unified-filter-block" id="filter-section" aria-label="Filtros de Búsqueda y Análisis">
       <div class="filter-header">
-        <span>Filtros Dinámicos de Flujo de Caja</span>
-        <button class="btn btn-secondary btn-sm" id="btn-reset-filters">Limpiar Filtros</button>
+        <div class="filter-header-title">
+          <span class="filter-header-icon">⚡</span>
+          <span class="filter-header-text">Filtros Dinámicos de Flujo de Caja</span>
+          <span class="filter-counter-badge" id="filter-active-count">Todos los registros</span>
+        </div>
+        <div class="filter-header-actions">
+          <button class="btn btn-secondary btn-sm" id="btn-reset-filters" title="Limpiar todos los filtros y restaurar valores por defecto">
+            🧹 Limpiar Filtros
+          </button>
+          <button class="btn btn-secondary btn-sm btn-collapse-toggle" id="btn-toggle-filter-block" title="Contraer o expandir panel de filtros">
+            ▲ Ocultar Filtros
+          </button>
+        </div>
       </div>
 
-      <div class="filter-controls">
-        <!-- Live Search -->
-        <div class="search-input-wrapper">
-          <span class="search-icon">🔍</span>
-          <input 
-            type="text" 
-            class="input-field" 
-            id="filter-search" 
-            placeholder="Buscar por beneficiario, concepto, documento..." 
-            autocomplete="off"
-          >
+      <!-- Collapsible Body (Expanded by Default) -->
+      <div class="filter-block-body" id="filter-block-body">
+        <!-- Main Controls Grid -->
+        <div class="filter-controls-row">
+          <!-- Live Search -->
+          <div class="filter-field-wrapper search-wrapper">
+            <label class="filter-field-label" for="filter-search">Búsqueda Rápida</label>
+            <div class="search-input-wrapper">
+              <span class="search-icon">🔍</span>
+              <input 
+                type="text" 
+                class="input-field" 
+                id="filter-search" 
+                placeholder="Buscar por beneficiario, concepto, doc..." 
+                autocomplete="off"
+              >
+            </div>
+          </div>
+
+          <!-- Flow Filter (es) -->
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="filter-es">Tipo de Flujo</label>
+            <select class="select-field" id="filter-es" aria-label="Filtrar por Tipo de Flujo">
+              <option value="">Todos los Tipos</option>
+              <option value="INGRESO">Solo Ingresos</option>
+              <option value="EGRESO">Solo Egresos</option>
+            </select>
+          </div>
+
+          <!-- Month Filter (mes) -->
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="filter-mes">Mes</label>
+            <select class="select-field" id="filter-mes" aria-label="Filtrar por Mes">
+              <option value="">Todos los Meses</option>
+            </select>
+          </div>
+
+          <!-- Classification Filter (clasificacion) -->
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="filter-clas">Clasificación</label>
+            <select class="select-field" id="filter-clas" aria-label="Filtrar por Clasificación">
+              <option value="">Todas las Clasificaciones</option>
+            </select>
+          </div>
+
+          <!-- Bank Filter (banco) -->
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="filter-banco">Banco</label>
+            <select class="select-field" id="filter-banco" aria-label="Filtrar por Banco">
+              <option value="">Todos los Bancos</option>
+            </select>
+          </div>
+
+          <!-- Execution Channel Filter (medio_ejecucion) -->
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="filter-medio">Medio de Ejecución</label>
+            <select class="select-field" id="filter-medio" aria-label="Filtrar por Medio de Ejecución">
+              <option value="">Todos los Medios</option>
+            </select>
+          </div>
+
+          <!-- Page Size -->
+          <div class="filter-field-wrapper page-size-wrapper">
+            <label class="filter-field-label" for="page-size-select">Filas / Pág</label>
+            <select class="select-field" id="page-size-select" aria-label="Filas por página">
+              <option value="10">10 / pág</option>
+              <option value="25" selected>25 / pág</option>
+              <option value="50">50 / pág</option>
+              <option value="100">100 / pág</option>
+            </select>
+          </div>
         </div>
 
-        <!-- Flow Filter (es) -->
-        <select class="select-field" id="filter-es" aria-label="Filtrar por Tipo de Flujo">
-          <option value="">Todos los Tipos</option>
-          <option value="INGRESO">Solo Ingresos</option>
-          <option value="EGRESO">Solo Egresos</option>
-        </select>
+        <!-- Detailed Filters & Ranges Grid -->
+        <div class="filter-details-row">
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="table-filter-date-from">Fecha Desde</label>
+            <input type="date" class="table-filter-input" id="table-filter-date-from" title="Filtrar fecha inicial">
+          </div>
 
-        <!-- Month Filter (mes) -->
-        <select class="select-field" id="filter-mes" aria-label="Filtrar por Mes">
-          <option value="">Todos los Meses</option>
-        </select>
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="table-filter-date-to">Fecha Hasta</label>
+            <input type="date" class="table-filter-input" id="table-filter-date-to" title="Filtrar fecha final">
+          </div>
 
-        <!-- Classification Filter (clasificacion) -->
-        <select class="select-field" id="filter-clas" aria-label="Filtrar por Clasificación">
-          <option value="">Todas las Clasificaciones</option>
-        </select>
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="table-filter-doc">Nro. Documento / Ref</label>
+            <input type="text" class="table-filter-input" id="table-filter-doc" placeholder="Ej: 1100188942">
+          </div>
 
-        <!-- Bank Filter (banco) -->
-        <select class="select-field" id="filter-banco" aria-label="Filtrar por Banco">
-          <option value="">Todos los Bancos</option>
-        </select>
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="table-filter-benef">Beneficiario / Cliente</label>
+            <input type="text" class="table-filter-input" id="table-filter-benef" placeholder="Nombre cliente...">
+          </div>
 
-        <!-- Execution Channel Filter (medio_ejecucion) -->
-        <select class="select-field" id="filter-medio" aria-label="Filtrar por Medio de Ejecución">
-          <option value="">Todos los Medios</option>
-        </select>
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="table-filter-min-monto">Monto Mín ($)</label>
+            <input type="number" step="any" class="table-filter-input" id="table-filter-min-monto" placeholder="Min $">
+          </div>
 
-        <!-- Page Size -->
-        <select class="select-field" id="page-size-select" style="min-width: 110px;" aria-label="Filas por página">
-          <option value="10">10 / pág</option>
-          <option value="25" selected>25 / pág</option>
-          <option value="50">50 / pág</option>
-          <option value="100">100 / pág</option>
-        </select>
+          <div class="filter-field-wrapper">
+            <label class="filter-field-label" for="table-filter-max-monto">Monto Máx ($)</label>
+            <input type="number" step="any" class="table-filter-input" id="table-filter-max-monto" placeholder="Max $">
+          </div>
+        </div>
       </div>
     </section>
 
@@ -277,47 +346,8 @@
           <button class="btn btn-excel" id="btn-export-excel" title="Exportar movimientos a archivo Excel (.xlsx)">
             📊 Exportar a Excel
           </button>
-          <button class="btn btn-secondary btn-sm" id="btn-toggle-table-filters" title="Mostrar u ocultar filtros avanzados de tabla">
-            ⚙️ Filtros de Tabla
-          </button>
-        </div>
-      </div>
-
-      <!-- Dedicated Table Filters Sub-Toolbar -->
-      <div class="table-filters-toolbar" id="table-filters-toolbar">
-        <div class="table-filter-group">
-          <label class="table-filter-label" for="table-filter-date-from">Fecha Desde</label>
-          <input type="date" class="table-filter-input" id="table-filter-date-from" title="Filtrar fecha inicial">
-        </div>
-
-        <div class="table-filter-group">
-          <label class="table-filter-label" for="table-filter-date-to">Fecha Hasta</label>
-          <input type="date" class="table-filter-input" id="table-filter-date-to" title="Filtrar fecha final">
-        </div>
-
-        <div class="table-filter-group">
-          <label class="table-filter-label" for="table-filter-doc">Nro. Documento / Ref</label>
-          <input type="text" class="table-filter-input" id="table-filter-doc" placeholder="Ej: 1100188942">
-        </div>
-
-        <div class="table-filter-group">
-          <label class="table-filter-label" for="table-filter-benef">Beneficiario</label>
-          <input type="text" class="table-filter-input" id="table-filter-benef" placeholder="Nombre cliente...">
-        </div>
-
-        <div class="table-filter-group">
-          <label class="table-filter-label" for="table-filter-min-monto">Monto Mín ($)</label>
-          <input type="number" step="any" class="table-filter-input" id="table-filter-min-monto" placeholder="Min $">
-        </div>
-
-        <div class="table-filter-group">
-          <label class="table-filter-label" for="table-filter-max-monto">Monto Máx ($)</label>
-          <input type="number" step="any" class="table-filter-input" id="table-filter-max-monto" placeholder="Max $">
-        </div>
-
-        <div class="table-filter-actions">
-          <button class="btn btn-secondary btn-sm" id="btn-clear-table-filters" title="Limpiar filtros específicos de tabla">
-            Limpiar Filtros Tabla
+          <button class="btn btn-secondary btn-sm" id="btn-toggle-table-filters" title="Ver o ajustar filtros en el panel unificado">
+            ⚡ Panel de Filtros
           </button>
         </div>
       </div>

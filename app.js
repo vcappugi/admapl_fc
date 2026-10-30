@@ -1259,6 +1259,34 @@ function escapeHtml(str) {
     .replace(/'/g, '&#039;');
 }
 
+// Update Active Filters Counter Badge
+function updateActiveFiltersBadge() {
+  const badge = document.getElementById('filter-active-count');
+  if (!badge) return;
+
+  let activeCount = 0;
+  if (state.filters.search) activeCount++;
+  if (state.filters.es) activeCount++;
+  if (state.filters.mes) activeCount++;
+  if (state.filters.clasificacion) activeCount++;
+  if (state.filters.banco) activeCount++;
+  if (state.filters.medio_ejecucion) activeCount++;
+  if (state.filters.dateFrom) activeCount++;
+  if (state.filters.dateTo) activeCount++;
+  if (state.filters.documento) activeCount++;
+  if (state.filters.beneficiario) activeCount++;
+  if (state.filters.minAmount !== null && !isNaN(state.filters.minAmount)) activeCount++;
+  if (state.filters.maxAmount !== null && !isNaN(state.filters.maxAmount)) activeCount++;
+
+  if (activeCount === 0) {
+    badge.textContent = 'Todos los registros';
+    badge.classList.remove('has-active');
+  } else {
+    badge.textContent = `${activeCount} filtro${activeCount > 1 ? 's' : ''} activo${activeCount > 1 ? 's' : ''}`;
+    badge.classList.add('has-active');
+  }
+}
+
 // Setup Event Listeners
 function setupEvents() {
   // Search input debounce
@@ -1270,6 +1298,7 @@ function setupEvents() {
       debounceTimer = setTimeout(() => {
         state.filters.search = e.target.value.trim();
         state.page = 1;
+        updateActiveFiltersBadge();
         fetchTableData();
         updateAnalytics();
       }, 350);
@@ -1283,6 +1312,7 @@ function setupEvents() {
       el.addEventListener('change', (e) => {
         state.filters[filterKey] = e.target.value;
         state.page = 1;
+        updateActiveFiltersBadge();
         fetchTableData();
         updateAnalytics();
       });
@@ -1323,6 +1353,7 @@ function setupEvents() {
         const el = document.getElementById(id);
         if (el) el.value = '';
       });
+      updateActiveFiltersBadge();
       fetchTableData();
       updateAnalytics();
     });
@@ -1374,14 +1405,29 @@ function setupEvents() {
     downloadTemplateModalBtn.addEventListener('click', downloadTemplateCSV);
   }
 
-  // Table Filters Sub-Toolbar Toggle
+  // Unified Filter Block Toggle (Expand/Collapse - Expanded by default)
+  const toggleFilterBtn = document.getElementById('btn-toggle-filter-block');
+  const filterBlockBody = document.getElementById('filter-block-body');
+  if (toggleFilterBtn && filterBlockBody) {
+    toggleFilterBtn.addEventListener('click', () => {
+      const isCollapsed = filterBlockBody.classList.toggle('collapsed');
+      toggleFilterBtn.innerHTML = isCollapsed ? '▼ Mostrar Filtros' : '▲ Ocultar Filtros';
+      toggleFilterBtn.setAttribute('aria-expanded', !isCollapsed);
+    });
+  }
+
+  // Shortcut from Table Toolbar to Unified Filter Panel
   const toggleTableFiltersBtn = document.getElementById('btn-toggle-table-filters');
-  const tableFiltersToolbar = document.getElementById('table-filters-toolbar');
-  if (toggleTableFiltersBtn && tableFiltersToolbar) {
+  if (toggleTableFiltersBtn) {
     toggleTableFiltersBtn.addEventListener('click', () => {
-      tableFiltersToolbar.classList.toggle('collapsed');
-      const isCollapsed = tableFiltersToolbar.classList.contains('collapsed');
-      toggleTableFiltersBtn.textContent = isCollapsed ? '⚙️ Filtros de Tabla' : '▲ Ocultar Filtros';
+      if (filterBlockBody && filterBlockBody.classList.contains('collapsed')) {
+        filterBlockBody.classList.remove('collapsed');
+        if (toggleFilterBtn) toggleFilterBtn.innerHTML = '▲ Ocultar Filtros';
+      }
+      const filterSection = document.getElementById('filter-section');
+      if (filterSection) {
+        filterSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
     });
   }
 
@@ -1666,6 +1712,7 @@ function setupTableFiltersEvents() {
       state.filters.maxAmount = (maxVal !== '' && !isNaN(maxVal)) ? parseFloat(maxVal) : null;
 
       state.page = 1;
+      updateActiveFiltersBadge();
       fetchTableData();
       updateAnalytics();
     }, 350);
@@ -1696,6 +1743,7 @@ function setupTableFiltersEvents() {
       state.filters.minAmount = null;
       state.filters.maxAmount = null;
       state.page = 1;
+      updateActiveFiltersBadge();
       fetchTableData();
       updateAnalytics();
     });
@@ -2739,6 +2787,7 @@ function setupAuthEvents() {
 document.addEventListener('DOMContentLoaded', async () => {
   setupEvents();
   setupAuthEvents();
+  updateActiveFiltersBadge();
 
   const ok = initSupabase();
   if (ok) {

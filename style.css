@@ -362,7 +362,7 @@ body {
 }
 
 /* ==========================================================================
-   Filter Bar
+   Unified Filter Block (Collapsible & Rich Controls)
    ========================================================================== */
 .filter-section {
   background: var(--bg-card);
@@ -370,10 +370,12 @@ body {
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid var(--border-card);
   border-radius: var(--radius-lg);
-  padding: 18px 24px;
+  padding: 16px 22px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 0;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.35), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+  transition: all 0.3s ease;
 }
 
 .filter-header {
@@ -383,6 +385,153 @@ body {
   font-size: 13px;
   font-weight: 600;
   color: var(--text-muted);
+  user-select: none;
+}
+
+.filter-header-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+}
+
+.filter-header-icon {
+  font-size: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.filter-header-text {
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.filter-counter-badge {
+  font-size: 11px;
+  font-weight: 500;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  background: rgba(148, 163, 184, 0.12);
+  color: var(--text-muted);
+  border: 1px solid rgba(148, 163, 184, 0.2);
+  transition: all 0.25s ease;
+  display: inline-flex;
+  align-items: center;
+}
+
+.filter-counter-badge.has-active {
+  background: rgba(99, 102, 241, 0.18);
+  color: #a5b4fc;
+  border-color: rgba(99, 102, 241, 0.45);
+  font-weight: 600;
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.25);
+}
+
+.filter-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.btn-collapse-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border-subtle);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+}
+
+.btn-collapse-toggle:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--text-main);
+}
+
+/* Collapsible Filter Body */
+.filter-block-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  max-height: 1200px;
+  opacity: 1;
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.25s ease, margin 0.3s ease, padding 0.3s ease, border-color 0.3s ease;
+}
+
+.filter-block-body.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin-top: 0;
+  padding-top: 0;
+  padding-bottom: 0;
+  border-top-color: transparent;
+  pointer-events: none;
+}
+
+/* Rows & Controls */
+.filter-controls-row {
+  display: grid;
+  grid-template-columns: 2fr 1.1fr 1fr 1.1fr 1.1fr 1.2fr 0.9fr;
+  gap: 12px;
+  align-items: flex-end;
+}
+
+.filter-details-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1.2fr 1.4fr 1fr 1fr;
+  gap: 12px;
+  align-items: flex-end;
+  padding-top: 14px;
+  border-top: 1px dashed rgba(255, 255, 255, 0.07);
+}
+
+.filter-field-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.filter-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 1440px) {
+  .filter-controls-row {
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+  .filter-details-row {
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  }
+}
+
+@media (max-width: 768px) {
+  .filter-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .filter-header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
 }
 
 .filter-controls {
@@ -610,20 +759,21 @@ body {
 }
 
 .table-filter-input {
+  width: 100%;
   background: var(--bg-input);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
-  padding: 7px 10px;
+  padding: 9px 12px;
   color: var(--text-main);
   font-family: var(--font-main);
-  font-size: 12px;
+  font-size: 13px;
   outline: none;
   transition: all var(--transition-fast);
 }
 
 .table-filter-input:focus {
   border-color: var(--indigo-primary);
-  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.2);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
 
 .table-filter-actions {
