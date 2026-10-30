@@ -913,27 +913,247 @@ function triggerDirectDownload(url, filename = '') {
   }, 4000);
 }
 
-// Export Filtered Dataset to native Excel (.xlsx)
+// Descargar Plantilla CSV Oficial (Separada por comas)
+function downloadTemplateCSV(e) {
+  if (e && typeof e.preventDefault === 'function') {
+    e.preventDefault();
+  }
+
+  const headers = [
+    'SEMANA', 'es', 'mes', 'año', 'clasificacion', 'fecha', 'banco',
+    'documento', 'tipo', 'referencia', 'Monto BS', 'tasa', 'bcv_sap',
+    'monto', 'division', 'beneficiario', 'concepto', 'texto',
+    'concepto1', 'clas', 'medio_ejecucion'
+  ];
+
+  const escapeCsv = (val) => {
+    if (val === null || val === undefined) return '""';
+    const s = String(val).replace(/"/g, '""');
+    return `"${s}"`;
+  };
+
+  const sampleRows = [
+    [
+      '', 'INGRESO', 'ENERO', '2026', 'OPERATIVO', '02/01/2026', 'BANESCO 995',
+      '1100188942', 'NC', '34044646', '100,000.00', '301.37', '332.00',
+      '331.82', '1208', '34044646', 'ANTICIPO RECIBIDO DE CLIENTES',
+      'PAGO CUOTA 1 CLIENTE 34044646', 'ANTICIPO RECIBIDO DE CLIENTES', 'MAC', 'BANCOS NACIONALES'
+    ],
+    [
+      '', 'EGRESO', 'ENERO', '2026', 'OPERATIVO', '05/01/2026', 'BNC 045',
+      '1100196666', 'ND', 'REF-98765', '-131,981.20', '355.55', '355.55',
+      '-370.87', '1208', 'EXCELLENCE HOTELES', 'HOSPEDAJE PERSONAL',
+      'FACTURA 0393 HOSPEDAJE', 'GASTOS DE PERSONAL', 'MPD', 'BANCOS NACIONALES'
+    ],
+    [
+      '', 'INGRESO', 'ENERO', '2026', 'OPERATIVO', '10/01/2026', 'BANCO MERCANTIL',
+      '1100201122', 'TR', '34044646', '45,000.00', '301.37', '301.37',
+      '149.32', '1208', 'DISTRIBUIDORA ANDINA', 'COBRO FACTURA 5420',
+      'COBRO SERVICIOS ENERO', 'VENTAS AL MAYOR', 'MAC', 'BANCOS NACIONALES'
+    ],
+    [
+      '', 'EGRESO', 'ENERO', '2026', 'OPERATIVO', '15/01/2026', 'BANCO PROVINCIAL',
+      '1100215544', 'TR', 'REF-11442', '-25,000.00', '301.37', '301.37',
+      '-82.95', '1208', 'CANTV SERVICIOS', 'PAGO TELEFONIA E INTERNET',
+      'PAGO MENSUAL CANTV', 'SERVICIOS PUBLICOS', 'MPD', 'BANCOS NACIONALES'
+    ]
+  ];
+
+  const lines = [
+    headers.map(escapeCsv).join(','),
+    ...sampleRows.map(row => row.map(escapeCsv).join(','))
+  ];
+
+  const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  triggerDirectDownload(url, 'Plantilla_Movimientos.csv');
+}
+
+// Consultar registros filtrados directamente desde Supabase respetando todos los filtros activos
+async function fetchFilteredRecordsForExport(onProgress) {
+  if (!supabaseClient) {
+    initSupabase();
+  }
+  if (!supabaseClient) {
+    throw new Error('No se pudo inicializar la conexión con Supabase.');
+  }
+
+  // Generador de consulta con todos los filtros de estado aplicados
+  const buildBaseQuery = (isCountOnly = false) => {
+    let query = supabaseClient
+      .from('fc_mov')
+      .select(
+        isCountOnly
+          ? 'id'
+          : 'id, fecha, es, banco, medio_ejecucion, clasificacion, documento, referencia, tasa, bcv_sap, monto, division, beneficiario, concepto, concepto1, texto, mes, año',
+        { count: 'exact', head: isCountOnly }
+      );
+
+    if (state.filters.es) query = query.eq('es', state.filters.es);
+    if (state.filters.mes) query = query.eq('mes', state.filters.mes);
+    if (state.filters.clasificacion) query = query.eq('clasificacion', state.filters.clasificacion);
+    if (state.filters.banco) query = query.eq('banco', state.filters.banco);
+    if (state.filters.medio_ejecucion) query = query.eq('medio_ejecucion', state.filters.medio_ejecucion);
+    if (state.filters.dateFrom) query = query.gte('fecha', state.filters.dateFrom);
+    if (state.filters.dateTo) query = query.lte('fecha', state.filters.dateTo);
+    if (state.filters.documento) {
+      const docTerm = `%${state.filters.documento}%`;
+      query = query.or(`documento.ilike.${docTerm},referencia.ilike.${docTerm}`);
+    }
+    if (state.filters.beneficiario) {
+      query = query.ilike('beneficiario', `%${state.filters.beneficiario}%`);
+    }
+    if (state.filters.minAmount !== null && !isNaN(state.filters.minAmount)) {
+      query = query.gte('monto', state.filters.minAmount);
+    }
+    if (state.filters.maxAmount !== null && !isNaN(state.filters.maxAmount)) {
+      query = query.lte('monto', state.filters.maxAmount);
+    }
+    if (state.filters.search) {
+      const term = `%${state.filters.search}%`;
+      query = query.or(`beneficiario.ilike.${term},concepto.ilike.${term},documento.ilike.${term},referencia.ilike.${term}`);
+    }
+
+    if (!isCountOnly) {
+      query = query.order(state.sortBy || 'fecha', { ascending: !!state.sortAsc, nullsFirst: false });
+    }
+    return query;
+  };
+
+  // 1. Obtener conteo total filtrado
+  const countRes = await buildBaseQuery(true);
+  if (countRes.error) throw countRes.error;
+  const totalCount = countRes.count || 0;
+
+  if (totalCount === 0) {
+    return [];
+  }
+
+  // 2. Descargar en lotes de hasta 1000 registros (límite de Supabase por página)
+  const BATCH_SIZE = 1000;
+  // Límite de seguridad para exportación completa
+  const MAX_RECORDS = 50000;
+  const targetCount = Math.min(totalCount, MAX_RECORDS);
+
+  let allRecords = [];
+  for (let from = 0; from < targetCount; from += BATCH_SIZE) {
+    const to = Math.min(from + BATCH_SIZE - 1, targetCount - 1);
+    if (typeof onProgress === 'function') {
+      onProgress(allRecords.length, targetCount);
+    }
+    const chunkQuery = buildBaseQuery(false).range(from, to);
+    const { data, error } = await chunkQuery;
+    if (error) throw error;
+    if (data && data.length > 0) {
+      allRecords = allRecords.concat(data);
+    } else {
+      break;
+    }
+  }
+
+  if (typeof onProgress === 'function') {
+    onProgress(allRecords.length, targetCount);
+  }
+
+  return allRecords;
+}
+
+// Export Filtered Dataset to native Excel (.xlsx) directamente en el navegador
 async function exportToExcel() {
   const btn = document.getElementById('btn-export-excel');
   const originalText = btn ? btn.innerHTML : '📊 Exportar a Excel';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<div class="spinner"></div> Generando Excel...';
+    btn.innerHTML = '<div class="spinner"></div> Consultando registros...';
   }
 
   try {
-    const params = buildExportParams('xlsx');
     const filename = getExportFilename('xlsx');
-    const downloadUrl = `export_excel.php?${params.toString()}`;
-    triggerDirectDownload(downloadUrl, filename);
+
+    // Obtener registros con indicador de progreso en el botón
+    const records = await fetchFilteredRecordsForExport((loaded, total) => {
+      if (btn) {
+        btn.innerHTML = `<div class="spinner"></div> Exportando ${formatNumber(loaded)} / ${formatNumber(total)}...`;
+      }
+    });
+
+    if (!records || records.length === 0) {
+      alert('No se encontraron registros que coincidan con los filtros aplicados.');
+      return;
+    }
 
     if (btn) {
-      btn.innerHTML = '✅ Descarga Iniciada';
+      btn.innerHTML = '<div class="spinner"></div> Generando archivo .xlsx...';
+    }
+
+    if (typeof window.XLSX === 'undefined') {
+      throw new Error('La librería SheetJS (XLSX) no está cargada.');
+    }
+
+    const headers = [
+      'ID', 'Fecha', 'Tipo Flujo', 'Banco', 'Medio Ejecución', 'Clasificación',
+      'Nro Documento', 'Referencia', 'Tasa Cambio', 'BCV SAP', 'Monto USD',
+      'División', 'Beneficiario / Cliente', 'Concepto', 'Concepto Secundario',
+      'Texto / Observación', 'Mes', 'Año'
+    ];
+
+    const dataRows = records.map(r => [
+      r.id,
+      r.fecha || '',
+      r.es || '',
+      r.banco || '',
+      r.medio_ejecucion || '',
+      r.clasificacion || '',
+      r.documento || '',
+      r.referencia || '',
+      (r.tasa !== null && r.tasa !== undefined && r.tasa !== '') ? Number(r.tasa) : '',
+      (r.bcv_sap !== null && r.bcv_sap !== undefined && r.bcv_sap !== '') ? Number(r.bcv_sap) : '',
+      (r.monto !== null && r.monto !== undefined && r.monto !== '') ? Number(r.monto) : 0,
+      r.division || '',
+      r.beneficiario || '',
+      r.concepto || '',
+      r.concepto1 || '',
+      r.texto || '',
+      r.mes || '',
+      r.año || ''
+    ]);
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+
+    // Ancho de columnas óptimo para visualización ejecutiva
+    worksheet['!cols'] = [
+      { wch: 9 },   // ID
+      { wch: 12 },  // Fecha
+      { wch: 12 },  // Tipo Flujo
+      { wch: 22 },  // Banco
+      { wch: 22 },  // Medio Ejecución
+      { wch: 20 },  // Clasificación
+      { wch: 16 },  // Nro Documento
+      { wch: 16 },  // Referencia
+      { wch: 12 },  // Tasa Cambio
+      { wch: 12 },  // BCV SAP
+      { wch: 15 },  // Monto USD
+      { wch: 10 },  // División
+      { wch: 28 },  // Beneficiario
+      { wch: 28 },  // Concepto
+      { wch: 28 },  // Concepto Secundario
+      { wch: 32 },  // Texto
+      { wch: 12 },  // Mes
+      { wch: 8 }    // Año
+    ];
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Flujo de Caja');
+
+    // Descarga directa del archivo nativo Excel
+    XLSX.writeFile(workbook, filename);
+
+    if (btn) {
+      btn.innerHTML = `✅ ¡${formatNumber(records.length)} Exportados!`;
     }
   } catch (err) {
     console.error('Error al exportar a Excel:', err);
-    alert('Error al exportar a Excel: ' + (err.message || err));
+    alert('Error al generar archivo Excel: ' + (err.message || err));
   } finally {
     setTimeout(() => {
       if (btn) {
@@ -944,27 +1164,80 @@ async function exportToExcel() {
   }
 }
 
-// Export Filtered View to CSV
+// Export Filtered View to CSV (separado por comas y con BOM UTF-8) directamente en el navegador
 async function exportFilteredCSV() {
   const btn = document.getElementById('btn-export');
   const originalText = btn ? btn.innerHTML : '⬇ Exportar Vista (CSV)';
   if (btn) {
     btn.disabled = true;
-    btn.innerHTML = '<div class="spinner"></div> Exportando...';
+    btn.innerHTML = '<div class="spinner"></div> Consultando registros...';
   }
 
   try {
-    const params = buildExportParams('csv');
     const filename = getExportFilename('csv');
-    const downloadUrl = `export_excel.php?${params.toString()}`;
-    triggerDirectDownload(downloadUrl, filename);
+
+    const records = await fetchFilteredRecordsForExport((loaded, total) => {
+      if (btn) {
+        btn.innerHTML = `<div class="spinner"></div> Exportando ${formatNumber(loaded)} / ${formatNumber(total)}...`;
+      }
+    });
+
+    if (!records || records.length === 0) {
+      alert('No se encontraron registros que coincidan con los filtros aplicados.');
+      return;
+    }
 
     if (btn) {
-      btn.innerHTML = '✅ Descarga Iniciada';
+      btn.innerHTML = '<div class="spinner"></div> Generando CSV...';
+    }
+
+    const headers = [
+      'ID', 'Fecha', 'Tipo Flujo', 'Banco', 'Medio Ejecución', 'Clasificación',
+      'Nro Documento', 'Referencia', 'Tasa Cambio', 'BCV SAP', 'Monto USD',
+      'División', 'Beneficiario / Cliente', 'Concepto', 'Concepto Secundario',
+      'Texto / Observación', 'Mes', 'Año'
+    ];
+
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '""';
+      const s = String(val).replace(/"/g, '""');
+      return `"${s}"`;
+    };
+
+    const lines = [
+      headers.map(escapeCsv).join(','),
+      ...records.map(r => [
+        r.id,
+        r.fecha || '',
+        r.es || '',
+        r.banco || '',
+        r.medio_ejecucion || '',
+        r.clasificacion || '',
+        r.documento || '',
+        r.referencia || '',
+        (r.tasa !== null && r.tasa !== undefined) ? r.tasa : '',
+        (r.bcv_sap !== null && r.bcv_sap !== undefined) ? r.bcv_sap : '',
+        (r.monto !== null && r.monto !== undefined) ? r.monto : '0.00',
+        r.division || '',
+        r.beneficiario || '',
+        r.concepto || '',
+        r.concepto1 || '',
+        r.texto || '',
+        r.mes || '',
+        r.año || ''
+      ].map(escapeCsv).join(','))
+    ];
+
+    const blob = new Blob(["\uFEFF" + lines.join("\r\n")], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    triggerDirectDownload(url, filename);
+
+    if (btn) {
+      btn.innerHTML = `✅ ¡${formatNumber(records.length)} Exportados!`;
     }
   } catch (err) {
     console.error('Error exportando CSV:', err);
-    alert('Error al exportar CSV: ' + err.message);
+    alert('Error al exportar CSV: ' + (err.message || err));
   } finally {
     setTimeout(() => {
       if (btn) {
@@ -1089,6 +1362,16 @@ function setupEvents() {
   const exportExcelBtn = document.getElementById('btn-export-excel');
   if (exportExcelBtn) {
     exportExcelBtn.addEventListener('click', exportToExcel);
+  }
+
+  // Template CSV Download Buttons (Client-side directly in CSV)
+  const downloadTemplateBtn = document.getElementById('btn-download-template');
+  if (downloadTemplateBtn) {
+    downloadTemplateBtn.addEventListener('click', downloadTemplateCSV);
+  }
+  const downloadTemplateModalBtn = document.getElementById('btn-download-template-modal');
+  if (downloadTemplateModalBtn) {
+    downloadTemplateModalBtn.addEventListener('click', downloadTemplateCSV);
   }
 
   // Table Filters Sub-Toolbar Toggle

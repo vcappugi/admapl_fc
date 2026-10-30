@@ -36,7 +36,7 @@ fputcsv($out, [
     'concepto1',
     'clas',
     'medio_ejecucion'
-], ';');
+], ',');
 
 // Fila de ejemplo 1: INGRESO
 fputcsv($out, [
@@ -50,10 +50,10 @@ fputcsv($out, [
     '1100188942',
     'NC',
     '34044646',
-    '100.000,00',
-    '301,37',
-    '332',
-    '331,82',
+    '100000.00',
+    '301.37',
+    '332.00',
+    '331.82',
     '1208',
     '34044646',
     'ANTICIPO RECIBIDO DE CLIENTES',
@@ -61,7 +61,7 @@ fputcsv($out, [
     'ANTICIPO RECIBIDO DE CLIENTES',
     'MAC',
     'BANCOS NACIONALES'
-], ';');
+], ',');
 
 // Fila de ejemplo 2: EGRESO
 fputcsv($out, [
@@ -75,10 +75,10 @@ fputcsv($out, [
     '1100196666',
     'ND',
     'REF-98765',
-    '-131.981,20',
-    '355,55',
-    '355,55',
-    '-370,87',
+    '-131981.20',
+    '355.55',
+    '355.55',
+    '-370.87',
     '1208',
     'EXCELLENCE HOTELES',
     'HOSPEDAJE PERSONAL',
@@ -86,7 +86,7 @@ fputcsv($out, [
     'GASTOS DE PERSONAL',
     'MPD',
     'BANCOS NACIONALES'
-], ';');
+], ',');
 
 fclose($out);
 exit;
